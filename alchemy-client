@@ -1,0 +1,162 @@
+#!/usr/bin/env ruby
+
+require "amqp"
+require "etc"
+require "json"
+require "pp"
+require "readline"
+require "socket"
+
+CONFIG = "#{ENV["HOME"]}/.config/alchemy-client"
+HISTORY = "#{CONFIG}/history"
+
+TERM_CURSOR_SAVE = "\e[s"
+TERM_CURSOR_UNSAVE = "\e[u"
+TERM_CLEAR_LINE = "\e[2K"
+
+def gen_random length = 10
+	(0...length).map{ ('a'..'z').to_a[rand(26)] }.join
+end
+
+def status_message message = nil
+	if $status_message
+		$stderr.print TERM_CURSOR_UNSAVE
+		$stderr.print TERM_CLEAR_LINE
+		$stderr.flush
+		$status_message = nil
+	end
+	if message
+		$stderr.print TERM_CURSOR_SAVE
+		$stderr.print message
+		$stderr.flush
+		$status_message = message
+	end
+end
+
+class AlchemyClient
+
+	attr_accessor :server_name
+
+	def initialize
+		@state = :none
+	end
+
+	def main
+
+		# update state
+		@state == :none or raise "Invalid state"
+		@state = :connecting
+		status_message "Connecting..."
+
+		@conn_id = gen_random
+		@server_queue_name = "alchemy-server-#{@server_name}"
+		@receive_queue_name = "alchemy-client-#{@conn_id}"
+
+		EventMachine.run do
+
+			# connect to message broker
+			@connection = AMQP.connect
+			@channel = AMQP::Channel.new @connection
+			@exchange = @channel.default_exchange
+
+			# create queue and subscribe
+			@receive_queue = @channel.queue @receive_queue_name, :exclusive => true
+			@receive_queue.subscribe { |headers, payload| handle_message headers, payload }
+
+			# start console session
+			who_i_am = "#{Etc.getlogin}@#{Socket.gethostname}"
+			data = [ "console", @conn_id, who_i_am ]
+			@exchange.publish JSON.dump(data), :routing_key => @server_queue_name
+
+		end
+
+		# update state
+		@state == :disconnecting or raise "Invalid state"
+		@state = :none
+		status_message
+
+	end
+
+	def handle_message headers, payload
+		data = JSON.parse payload
+		case [ message_type = data.shift, data.length ]
+
+		when [ "console-ok", 1 ]
+			@send_queue_name = data.shift
+
+			# update state
+			@state == :connecting or raise "Invalid state"
+			@state = :connected
+			status_message
+
+			# start input thread
+			input_thread = Thread.start { input_thread_main }
+
+		else
+			raise "Unknown message #{message_type}/#{data.length}"
+
+		end
+	end
+
+	def input_thread_main
+		history_load
+
+		while line = Readline.readline("#{@server_name}> ", true)
+			unless line =~ /\S/
+				Readline::HISTORY.pop
+				next
+			end
+
+			# send to server
+			status_message "Sending..."
+			data = [ "run_command", line ]
+			@exchange.publish JSON.dump(data), :routing_key => @send_queue_name
+			status_message
+
+		end
+		print "\n"
+
+		history_save
+		shutdown
+	end
+
+	def shutdown
+		EventMachine.schedule do
+
+			# update state
+			@state == :connected or raise "Invalid state"
+			@state = :disconnecting
+			status_message "Disconnecting"
+
+			# close connection and event machine
+			@connection.close do
+				EventMachine.stop_event_loop
+			end
+
+		end
+	end
+
+	def history_load
+		if File.exists? HISTORY
+			File.new(HISTORY).each_line do |line|
+				line = line.strip
+				Readline::HISTORY.push line
+			end
+		end
+	end
+
+	def history_save
+		Dir.mkdir CONFIG unless Dir.exists? CONFIG
+		File.open HISTORY, "w" do |f|
+			Readline::HISTORY.each do |line|
+				f.puts line
+			end
+		end
+	end
+
+end
+
+alchemy_client = AlchemyClient.new
+alchemy_client.server_name = ARGV[0]
+alchemy_client.main
+
