@@ -61,6 +61,9 @@ class AlchemyClient
 
 	def initialize
 		@state = :none
+		@mutex = Mutex.new
+		@resource = ConditionVariable.new
+		@terminate = false
 	end
 
 	def main
@@ -71,8 +74,9 @@ class AlchemyClient
 		status_message "Connecting..."
 
 		@conn_id = gen_random
-		@server_queue_name = "alchemy-server-#{@server_name}"
+		@connect_queue_name = "alchemy-server-#{@server_name}"
 		@receive_queue_name = "alchemy-client-#{@conn_id}"
+		@send_queue_name = "alchemy-server-#{@conn_id}"
 
 		EventMachine.run do
 
@@ -88,7 +92,7 @@ class AlchemyClient
 			# start console session
 			who_i_am = "#{Etc.getlogin}@#{Socket.gethostname}"
 			data = [ "console", @conn_id, who_i_am ]
-			@exchange.publish JSON.dump(data), :routing_key => @server_queue_name
+			@exchange.publish JSON.dump(data), :routing_key => @connect_queue_name
 
 		end
 
@@ -103,8 +107,7 @@ class AlchemyClient
 		data = JSON.parse payload
 		case [ message_type = data.shift, data.length ]
 
-		when [ "console-ok", 1 ]
-			@send_queue_name = data.shift
+		when [ "console-ok", 0 ]
 
 			# update state
 			@state == :connecting or raise "Invalid state"
@@ -113,6 +116,49 @@ class AlchemyClient
 
 			# start input thread
 			input_thread = Thread.start { input_thread_main }
+
+		when [ "command-ok", 0 ]
+
+			# update state
+			@state == :sending or raise "Invalid state"
+			@state = :receiving
+			status_message "Processing command..."
+
+		when [ "command-complete", 0 ]
+
+			# update state
+			@state == :receiving or raise "Invalid state"
+			@state = :connected
+			status_message
+
+			# signal user input thread
+			@mutex.synchronize do
+				@resource.signal
+			end
+
+		when [ "message", 1 ]
+			message = data.shift
+
+			# check state
+			@state == :receiving or raise "Invalid state"
+
+			# perform output
+			status_message
+			print message
+			status_message "Processing command..."
+
+		when [ "terminate", 0 ]
+
+			# update state
+			@state == :receiving or raise "Invalid state"
+			@state = :connected
+			status_message
+
+			# signal user input thread
+			@mutex.synchronize do
+				@terminate = true
+				@resource.signal
+			end
 
 		else
 			raise "Unknown message #{message_type}/#{data.length}"
@@ -124,19 +170,33 @@ class AlchemyClient
 		history_load
 
 		while line = Readline.readline("#{@server_name}> ", true)
+
 			unless line =~ /\S/
 				Readline::HISTORY.pop
 				next
 			end
 
-			# send to server
-			status_message "Sending..."
-			data = [ "run_command", line ]
-			@exchange.publish JSON.dump(data), :routing_key => @send_queue_name
-			status_message
+			EventMachine.schedule do
 
+				# update state
+				@state == :connected or raise "Invalid state"
+				@state = :sending
+				status_message "Sending command..."
+
+				# send to server
+				data = [ "run_command", line ]
+				@exchange.publish JSON.dump(data), :routing_key => @send_queue_name
+
+			end
+
+			# wait for signal that command is complete
+			@mutex.synchronize do
+				@resource.wait (@mutex)
+			end
+
+			break if @terminate
 		end
-		print "\n"
+		print "\n" unless @terminate
 
 		history_save
 		shutdown
