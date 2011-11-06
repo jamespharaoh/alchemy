@@ -6,7 +6,7 @@ The main home for Alchemy is currently on GitHub:
 
 * "https://github.com/jamespharaoh/alchemy":https://github.com/jamespharaoh/alchemy
 
-The author's name is James Pharaoh and he can be contacted on "mailto:james@phsys.co.uk":james@phsys.co.uk.
+The author's name is James Pharaoh and he can be contacted on "james@phsys.co.uk":mailto:james@phsys.co.uk.
 
 The source code is released under the Apache Licence, version 2. The full text of the licence is included in the file
 named LICENSE. It is also available online:
