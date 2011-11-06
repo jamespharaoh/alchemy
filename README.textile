@@ -101,7 +101,7 @@ Shutdown complete
 
 h2. Available commands
 
-h2. Shutdown
+h3. Shutdown
 
 *Syntax:*
 
