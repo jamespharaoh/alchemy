@@ -6,7 +6,7 @@ h2. Website and contact
 
 The main home for Alchemy is currently GitHub:
 
-* https://github.com/jamespharaoh/alchemy
+* "https://github.com/jamespharaoh/alchemy":https://github.com/jamespharaoh/alchemy
 
 My name is James Pharaoh and I can be contacted at james@phsys.co.uk.
 
@@ -18,16 +18,21 @@ The full text of the licence is included in the file named LICENSE.
 
 It is also available online at the following URL:
 
-* http://www.apache.org/licenses/LICENSE-2.0.html
+* "http://www.apache.org/licenses/LICENSE-2.0.html":http://www.apache.org/licenses/LICENSE-2.0.html
 
 h2. Quick start
 
 Alchemy is written in erlang, and a bit of Ruby. You will also need RabbitMQ and CouchDB to get things going.
 
-First, download and unpack the alchemy distribution:
+First of all, get a copy of the Alchemy source code from github:
 
 <pre>
 ~$ git clone https://github.com/jamespharaoh/alchemy.git
+Cloning into alchemy...
+remote: Counting objects: 13, done.
+remote: Compressing objects: 100% (10/10), done.
+remote: Total 13 (delta 1), reused 13 (delta 1)
+Unpacking objects: 100% (13/13), done.
 ~$ cd alchemy
 </pre>
 
