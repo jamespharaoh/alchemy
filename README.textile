@@ -2,21 +2,14 @@ h1. Alchemy Readme
 
 This is the source code for Alchemy, a configuration database system.
 
-h2. Website and contact
-
-The main home for Alchemy is currently GitHub:
+The main home for Alchemy is currently on GitHub:
 
 * "https://github.com/jamespharaoh/alchemy":https://github.com/jamespharaoh/alchemy
 
-My name is James Pharaoh and I can be contacted at james@phsys.co.uk.
+The author's name is James Pharaoh and he can be contacted on "mailto:james@phsys.co.uk":james@phsys.co.uk.
 
-h2. License
-
-This software is licenced under the Apache Licence, version 2.
-
-The full text of the licence is included in the file named LICENSE.
-
-It is also available online at the following URL:
+The source code is released under the Apache Licence, version 2. The full text of the licence is included in the file
+named LICENSE. It is also available online:
 
 * "http://www.apache.org/licenses/LICENSE-2.0.html":http://www.apache.org/licenses/LICENSE-2.0.html
 
