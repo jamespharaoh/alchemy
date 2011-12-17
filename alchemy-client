@@ -69,7 +69,7 @@ class AlchemyClient
 	def main
 
 		# update state
-		@state == :none or raise "Invalid state"
+		@state == :none or raise "Invalid state: #{@state}"
 		@state = :connecting
 		status_message "Connecting..."
 
@@ -97,7 +97,7 @@ class AlchemyClient
 		end
 
 		# update state
-		@state == :disconnecting or raise "Invalid state"
+		@state == :disconnecting or raise "Invalid state: #{@state}"
 		@state = :none
 		status_message
 
@@ -110,7 +110,7 @@ class AlchemyClient
 		when [ "console-ok", 0 ]
 
 			# update state
-			@state == :connecting or raise "Invalid state"
+			@state == :connecting or raise "Invalid state: #{@state}"
 			@state = :connected
 			status_message
 
@@ -120,14 +120,14 @@ class AlchemyClient
 		when [ "command-ok", 0 ]
 
 			# update state
-			@state == :sending or raise "Invalid state"
+			@state == :sending or raise "Invalid state: #{@state}"
 			@state = :receiving
 			status_message "Processing command..."
 
 		when [ "command-complete", 0 ]
 
 			# update state
-			@state == :receiving or raise "Invalid state"
+			@state == :receiving or raise "Invalid state: #{@state}"
 			@state = :connected
 			status_message
 
@@ -140,7 +140,7 @@ class AlchemyClient
 			message = data.shift
 
 			# check state
-			@state == :receiving or raise "Invalid state"
+			@state == :receiving or raise "Invalid state: #{@state}"
 
 			# perform output
 			status_message
@@ -150,14 +150,24 @@ class AlchemyClient
 		when [ "terminate", 0 ]
 
 			# update state
-			@state == :receiving or raise "Invalid state"
-			@state = :connected
-			status_message
+			[ :receiving, :sending, :connected ].include? @state \
+				or raise "Invalid state: #{@state}"
 
-			# signal user input thread
-			@mutex.synchronize do
+			if @state == :connected
+
 				@terminate = true
-				@resource.signal
+
+			else
+
+				@state = :connected
+				status_message
+
+				# signal user input thread
+				@mutex.synchronize do
+					@terminate = true
+					@resource.signal
+				end
+
 			end
 
 		else
@@ -171,30 +181,31 @@ class AlchemyClient
 
 		while line = Readline.readline("#{@server_name}> ", true)
 
-			unless line =~ /\S/
-				Readline::HISTORY.pop
-				next
-			end
+			Readline::HISTORY.pop unless line =~ /\S/
 
 			EventMachine.schedule do
+				unless @terminate
 
-				# update state
-				@state == :connected or raise "Invalid state"
-				@state = :sending
-				status_message "Sending command..."
+					# update state
+					@state == :connected or raise "Invalid state: #{@state}"
+					@state = :sending
+					status_message "Sending command..."
 
-				# send to server
-				data = [ "run_command", line ]
-				@exchange.publish JSON.dump(data), :routing_key => @send_queue_name
+					# send to server
+					data = [ "run_command", line ]
+					@exchange.publish JSON.dump(data), :routing_key => @send_queue_name
 
+				end
 			end
 
-			# wait for signal that command is complete
-			@mutex.synchronize do
-				@resource.wait (@mutex)
+			# wait for command to finish
+			unless @terminate
+				@mutex.synchronize do
+					@resource.wait @mutex
+				end
 			end
-
 			break if @terminate
+
 		end
 		print "\n" unless @terminate
 
@@ -206,7 +217,7 @@ class AlchemyClient
 		EventMachine.schedule do
 
 			# update state
-			@state == :connected or raise "Invalid state"
+			@state == :connected or raise "Invalid state: #{@state}"
 			@state = :disconnecting
 			status_message "Disconnecting"
 

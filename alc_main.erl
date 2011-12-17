@@ -136,14 +136,23 @@ terminate (_Reason, State) ->
 
 	#state {
 		store_pid = StorePid,
-		console_pid = ConsolePid
+		console_pid = ConsolePid,
+		server_pid = ServerPid
 	} = State,
 
-	% console output
 	io:format ("Shutting down\n"),
+
+	io:format ("Stopping server\n"),
+
+	% stop server
+	alc_server:stop (ServerPid),
+
+	io:format ("Stopping console\n"),
 
 	% stop console
 	alc_console:stop (ConsolePid),
+
+	io:format ("Stopping store\n"),
 
 	% stop store
 	alc_store:stop (StorePid),

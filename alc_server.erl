@@ -27,7 +27,8 @@
 -include_lib ("amqp_client/include/amqp_client.hrl").
 
 -export ([
-	start_link/3 ]).
+	start_link/3,
+	stop/1 ]).
 
 -export ([
 	init/1,
@@ -43,6 +44,8 @@
 
 % ==================== public
 
+% ---------- start_link
+
 start_link (Mq, ServerName, ConsolePid) ->
 
 	gen_server:start_link (
@@ -51,7 +54,15 @@ start_link (Mq, ServerName, ConsolePid) ->
 		[ Mq, ServerName, ConsolePid ],
 		[]).
 
-% ==================== private
+% ---------- stop
+
+stop (Pid) ->
+
+	gen_server:call (
+		Pid,
+		stop).
+
+% ==================== gen_server
 
 % ---------- init
 
@@ -69,6 +80,12 @@ init ([ Mq, ServerName, ConsolePid ]) ->
 
 	% and return
 	{ ok, State }.
+
+% ---------- handle_call stop
+
+handle_call (stop, _From, State) ->
+
+	{ stop, normal, ok, State };
 
 % ---------- handle_call
 
@@ -88,23 +105,10 @@ handle_cast (Request, State) ->
 
 	{ noreply, State }.
 
-% ---------- handle_info basic.consume_ok
-
-handle_info (#'basic.consume_ok' {}, State) ->
-
-	{ noreply, State };
-
-% ---------- handle_info basic.cancel_ok
-
-handle_info (#'basic.cancel_ok' {}, State) ->
-
-	{ noreply, State };
-
 % ---------- handle_info basic.deliver
 
 handle_info (
-	{ #'basic.deliver' {
-			delivery_tag = Tag },
+	{	#'basic.deliver' { delivery_tag = Tag },
 		Message },
 	State) ->
 
@@ -143,7 +147,7 @@ terminate (_Reason, State) ->
 		mq_client = MqClient
 	} = State,
 
-	alc_mq:stop (MqClient),
+	alc_mq:close (MqClient),
 
 	ok.
 

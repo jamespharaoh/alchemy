@@ -23,8 +23,12 @@
 
 -module (alc_misc).
 
--export ([ gen_random/0, gen_random/1 ]).
--export ([ decode/1 ]).
+-export ([
+	gen_random/0,
+	gen_random/1 ]).
+
+-export ([
+	decode/1 ]).
 
 gen_random () -> gen_random (10).
 

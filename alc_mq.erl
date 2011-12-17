@@ -47,7 +47,8 @@
 
 -record (client, {
 	channel,
-	receive_queue }).
+	receive_queue,
+	tag }).
 
 % ==================== public
 
@@ -64,15 +65,14 @@ client_channel (Client) ->
 close (Client) ->
 
 	#client {
-		receive_queue = ReceiveQueue,
-		channel = Channel
+		channel = Channel,
+		tag = Tag
 	} = Client,
 
-	% delete queue
-	#'queue.delete_ok' {} =
-		amqp_channel:call (
-			Channel,
-			#'queue.delete' { queue = ReceiveQueue }),
+	% cancel subscription
+	amqp_channel:call (
+		Channel,
+		#'basic.cancel'{ consumer_tag = Tag }),
 
 	% close mq channel
 	amqp_channel:close (Channel),
@@ -106,18 +106,28 @@ open (Pid, ReceiveQueueStr) ->
 	#'queue.declare_ok' {} =
 		amqp_channel:call (
 			Channel,
-			#'queue.declare' { queue = ReceiveQueue }),
+			#'queue.declare' {
+				queue = ReceiveQueue,
+				exclusive = true,
+				auto_delete = true }),
 
 	% subscribe to messages
-	#'basic.consume_ok' {} =
+	#'basic.consume_ok' { consumer_tag = Tag } =
 		amqp_channel:subscribe (
 			Channel,
 			#'basic.consume' { queue = ReceiveQueue },
 			self ()),
 
+	% wait for confirmation
+	receive
+		#'basic.consume_ok' {} ->
+			ok
+	end,
+
 	% setup client
 	Client = #client {
 		channel = Channel,
+		tag = Tag,
 		receive_queue = ReceiveQueue },
 
 	% return
@@ -217,7 +227,9 @@ terminate (_Reason, State) ->
 	} = State,
 
 	% close mq connection
+io:format ("waiting for close\n"),
 	amqp_connection:close (Connection),
+io:format ("done close\n"),
 
 	ok.
 

@@ -123,18 +123,6 @@ handle_cast (Request, State) ->
 
 	{ noreply, State }.
 
-% ---------- handle_info basic.consume_ok
-
-handle_info (#'basic.consume_ok' {}, State) ->
-
-	{ noreply, State };
-
-% ---------- handle_info basic.cancel_ok
-
-handle_info (#'basic.cancel_ok' {}, State) ->
-
-	{ noreply, State };
-
 % ---------- handle_info basic.deliver
 
 handle_info ({ #'basic.deliver' { delivery_tag = Tag }, Message }, State) ->
@@ -205,6 +193,7 @@ handle_message (State, Data) ->
 handle_message (run_command, State, [ Command ]) ->
 	io:format ("Got command: ~s\n", [ Command ]),
 	case Command of
+		<<"">> -> command_nop (State);
 		<<"exit">> -> command_exit (State);
 		<<"help">> -> command_help (State);
 		<<"shutdown">> -> command_shutdown (State);
@@ -225,6 +214,19 @@ command_invalid (State, Command) ->
 
 	% send error message
 	mq_send (State, [ <<"message">>, <<"Command error. Type 'help' for assistance.\n">> ]),
+
+	% end command
+	mq_send (State, [ <<"command-complete">> ]),
+
+	% and return
+	{ noreply, State }.
+
+% ---------- command_nop
+
+command_nop (State) ->
+
+	% confirm command
+	mq_send (State, [ <<"command-ok">> ]),
 
 	% end command
 	mq_send (State, [ <<"command-complete">> ]),
