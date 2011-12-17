@@ -23,6 +23,8 @@
 
 -module (alc_boot).
 
+-include_lib ("amqp_client/include/amqp_client.hrl").
+
 -export ([ start/0 ]).
 
 -record (state, { mq, main }).
@@ -48,6 +50,9 @@ start () ->
 
 	end,
 
+	% notify parent
+	notify_parent (Mq, ServerName),
+
 	% setup state
 	State = #state {
 		mq = Mq,
@@ -55,6 +60,31 @@ start () ->
 
 	% go to main loop
 	loop (State).
+
+notify_parent (Mq, ServerName) ->
+
+	% open channel
+	{ ok, Channel } =
+		amqp_connection:open_channel (
+			alc_mq:get_connection (Mq)),
+
+	% construct payload
+	Payload = list_to_binary (
+		mochijson2:encode (ready)),
+
+	% cast message
+	amqp_channel:cast (
+		Channel,
+		#'basic.publish' {
+			exchange = <<"">>,
+			routing_key = list_to_binary ("alchemy-notify-" ++ ServerName) },
+		#amqp_msg{ payload = Payload }),
+
+	% close channel
+	amqp_channel:close (Channel),
+
+	% return
+	ok.
 
 loop (State) ->
 

@@ -227,9 +227,7 @@ terminate (_Reason, State) ->
 	} = State,
 
 	% close mq connection
-io:format ("waiting for close\n"),
 	amqp_connection:close (Connection),
-io:format ("done close\n"),
 
 	ok.
 
