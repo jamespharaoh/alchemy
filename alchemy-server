@@ -33,6 +33,7 @@ args = %W[
 	-s alc_boot
 	-sname alchemy-server-#{NAME}
 	--
+	simple
 	#{NAME}
 ]
 cmd = args.join " "

@@ -25,32 +25,70 @@
 
 -export ([ start/0 ]).
 
+-record (state, { mq, main }).
+
 start () ->
 
 	% process args
 	Args = init:get_plain_arguments (),
-	[ ServerName ] = Args,
+	[ Mode, ServerName ] = Args,
+
+	% start mq process
+	{ ok, Mq } =
+		alc_mq:start_link (ServerName),
 
 	% start main process
-	{ ok, MainPid } = alc_main:start_link (ServerName),
+	{ ok, Main } = case Mode of
 
-	% and wait for it to finish
-	loop (MainPid).
+		"hyper" ->
+			alc_hyper:start_link (Mq, ServerName);
 
-loop (MainPid) ->
+		"simple" ->
+			alc_main:start_link (Mq, ServerName)
+
+	end,
+
+	% setup state
+	State = #state {
+		mq = Mq,
+		main = Main },
+
+	% go to main loop
+	loop (State).
+
+loop (State) ->
+
+	% extract state
+	#state {
+		main = Main
+	} = State,
+
 	receive
 
-		{ 'EXIT', MainPid, Reason } ->
-			stop (Reason);
+		{ 'EXIT', Main, Reason } ->
+			stop (Reason, State);
 
 		Any ->
 			io:format ("ERROR alc_boot received ~p\n", [ Any ]),
-			loop (MainPid)
+			loop (State)
+
 	end.
 
-stop (normal) ->
+stop (normal, State) ->
+
+	% extract state
+	#state {
+		mq = Mq
+	} = State,
+
+	% shut down mq
+	alc_mq:stop (Mq),
+
 	halt (0);
 
-stop (Reason) ->
-	io:format ("Terminating for reason ~p\n", Reason),
+stop (Reason, _State) ->
+
+	io:format ("Terminating for reason ~p\n", [ Reason ]),
+
 	halt (1).
+

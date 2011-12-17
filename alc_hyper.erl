@@ -1,5 +1,5 @@
 %
-% Filename: alc_console.erl
+% Filename: alc_hyper.erl
 %
 % This is part of the Alchemy configuration database. For more
 % information, visit our home on the web at
@@ -21,51 +21,25 @@
 % limitations under the License.
 %
 
--module (alc_console).
+-module (alc_hyper).
 -behaviour (gen_server).
 
 -include_lib ("amqp_client/include/amqp_client.hrl").
 
--export ([
-	connect/3,
-	start_link/2,
-	stop/1 ]).
+-export ([ start_link/2 ]).
+-export ([ init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3 ]).
 
--export ([
-	init/1,
-	handle_call/3,
-	handle_cast/2,
-	handle_info/2,
-	terminate/2,
-	code_change/3 ]).
-
--record (state, {
-	mq,
-	server_name,
-	main_pid,
-	clients }).
+-record (state, { mq_client }).
 
 % ==================== public
 
-connect (ConsolePid, ConnId, Who) ->
-
-	gen_server:call (
-		ConsolePid,
-		{ connect, ConnId, Who }).
-
-start_link (ServerName, Mq) ->
+start_link (Mq, ServerName) ->
 
 	gen_server:start_link (
-		{ local, list_to_atom (ServerName ++ "_console") },
+		{ local, list_to_atom (ServerName ++ "_hyper") },
 		?MODULE,
 		[ ServerName, Mq ],
 		[]).
-
-stop (ConsolePid) ->
-
-	gen_server:call (
-		ConsolePid,
-		stop).
 
 % ==================== private
 
@@ -73,45 +47,28 @@ stop (ConsolePid) ->
 
 init ([ ServerName, Mq ]) ->
 
+	io:format ("Alchemy hypervisor (development version)\n"),
+	io:format ("Hypervisor name: ~s\n", [ ServerName ]),
+
+	% open mq client
+	{ ok, MqClient } =
+		alc_mq:open (Mq, "alchemy-hyper-" ++ ServerName),
+
 	% setup state
 	State = #state {
-		mq = Mq,
-		server_name = ServerName,
-		main_pid = list_to_atom (ServerName ++ "_main"),
-		clients = [] },
+		mq_client = MqClient },
+
+	% console output
+	io:format ("Hypervisor ready\n"),
 
 	% and return
 	{ ok, State }.
-
-% ---------- handle_call connect
-
-handle_call ({ connect, ConnId, Who }, _From, State) ->
-
-	#state {
-		mq = Mq,
-		server_name = ServerName
-	} = State,
-
-	{ ok, ClientPid } =
-		alc_console_client:start_link (
-			Mq,
-			ServerName,
-			ConnId,
-			Who),
-
-	{ reply, ClientPid, State };
-
-% ---------- handle_call stop
-
-handle_call (stop, _From, State) ->
-
-	{ stop, normal, ok, State };
 
 % ---------- handle_call
 
 handle_call (Request, From, State) ->
 
-	io:format ("alc_console:handle_call (~p, ~p, ~p)\n",
+	io:format ("alc_main:handle_call (~p, ~p, ~p)\n",
 		[ Request, From, State ]),
 
 	{ reply, error, State }.
@@ -120,27 +77,48 @@ handle_call (Request, From, State) ->
 
 handle_cast (Request, State) ->
 
-	io:format ("alc_console:handle_cast (~p, ~p)\n",
+	io:format ("alc_main:handle_cast (~p, ~p)\n",
 		[ Request, State ]),
 
 	{ noreply, State }.
+
+% ---------- handle_info shutdown
+
+handle_info ({ shutdown }, State) ->
+
+	{ stop, normal, State };
 
 % ---------- handle_info
 
 handle_info (Info, State) ->
 
-	io:format ("alc_console:handle_info (~p, ~p)\n",
+	io:format ("alc_main:handle_info (~p, ~p)\n",
 		[ Info, State ]),
 
 	{ noreply, State }.
 
 % ---------- terminate
 
-terminate (_Reason, _State) ->
+terminate (_Reason, State) ->
+
+	#state {
+		mq_client = MqClient
+	} = State,
+
+	% console output
+	io:format ("Hypservisor stopping\n"),
+
+	% close mq client
+	alc_mq:close (MqClient),
+
+	% console output
+	io:format ("Hypservisor stopped\n"),
+
 	ok.
 
 % ---------- code_change
 
 code_change (_OldVsn, State, _Extra) ->
+
 	{ ok, State }.
 

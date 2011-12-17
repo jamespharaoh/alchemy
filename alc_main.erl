@@ -26,44 +26,72 @@
 
 -include_lib ("amqp_client/include/amqp_client.hrl").
 
--export ([ start_link/1 ]).
--export ([ init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3 ]).
+-export ([
+	start_link/2 ]).
 
--record (state, { mq_connection, server_pid, console_pid }).
+-export ([
+	init/1,
+	handle_call/3,
+	handle_cast/2,
+	handle_info/2,
+	terminate/2,
+	code_change/3 ]).
+
+-record (state, {
+	mq,
+	store_pid,
+	console_pid,
+	server_pid }).
 
 % ==================== public
 
-start_link (ServerName) ->
-	GenServerName = { local, list_to_atom (ServerName ++ "_main") },
-	gen_server:start_link (GenServerName, ?MODULE, [ ServerName ], []).
+start_link (Mq, ServerName) ->
+
+	gen_server:start_link (
+		{ local, list_to_atom (ServerName ++ "_main") },
+		?MODULE,
+		[ Mq, ServerName ],
+		[]).
 
 % ==================== private
 
 % ---------- init
 
-init ([ ServerName ]) ->
+init ([ Mq, ServerName ]) ->
 
 	io:format ("Alchemy (development version)\n"),
 	io:format ("Server name: ~s\n", [ ServerName ]),
 
-	% mq connect
-	{ ok, MqConnection } = amqp_connection:start (#amqp_params_network {}),
+	io:format ("Starting store\n"),
+
+	% start store
+	{ ok, StorePid } =
+		alc_store:start_link (
+			ServerName),
+
+	io:format ("Starting console\n"),
 
 	% start console
-	{ ok, ConsolePid } = alc_console:start_link (ServerName, MqConnection),
+	{ ok, ConsolePid } =
+		alc_console:start_link (
+			ServerName,
+			Mq),
+
+	io:format ("Starting server\n"),
 
 	% start server
-	QueueName = list_to_binary ("alchemy-server-" ++ ServerName),
-	io:format ("Queue name: ~s\n", [ QueueName ]),
-	ServerPid = alc_server:start (ConsolePid, MqConnection, QueueName),
+	{ ok, ServerPid } = alc_server:start_link (
+		Mq,
+		ServerName,
+		ConsolePid),
 
 	% setup state
 	State = #state {
-		mq_connection = MqConnection,
-		server_pid = ServerPid,
-		console_pid = ConsolePid },
+		mq = Mq,
+		store_pid = StorePid,
+		console_pid = ConsolePid,
+		server_pid = ServerPid },
 
-	% console output
 	io:format ("Ready\n"),
 
 	% and return
@@ -72,32 +100,43 @@ init ([ ServerName ]) ->
 % ---------- handle_call
 
 handle_call (Request, From, State) ->
-	io:format ("alc_main:handle_call (~p, ~p, ~p)\n", [ Request, From, State ]),
+
+	io:format ("alc_main:handle_call (~p, ~p, ~p)\n",
+		[ Request, From, State ]),
+
 	{ reply, error, State }.
 
 % ---------- handle_cast
 
 handle_cast (Request, State) ->
-	io:format ("alc_main:handle_cast (~p, ~p)\n", [ Request, State ]),
+
+	io:format ("alc_main:handle_cast (~p, ~p)\n",
+		[ Request, State ]),
+
 	{ noreply, State }.
 
 % ---------- handle_info shutdown
 
 handle_info ({ shutdown }, State) ->
+
 	{ stop, normal, State };
 
 % ---------- handle_info
 
 handle_info (Info, State) ->
-	io:format ("alc_main:handle_info (~p, ~p)\n", [ Info, State ]),
+
+	io:format ("alc_main:handle_info (~p, ~p)\n",
+		[ Info, State ]),
+
 	{ noreply, State }.
 
 % ---------- terminate
 
 terminate (_Reason, State) ->
+
 	#state {
-		console_pid = ConsolePid,
-		mq_connection = MqConnection
+		store_pid = StorePid,
+		console_pid = ConsolePid
 	} = State,
 
 	% console output
@@ -106,8 +145,8 @@ terminate (_Reason, State) ->
 	% stop console
 	alc_console:stop (ConsolePid),
 
-	% mq disconnect
-	amqp_connection:close (MqConnection),
+	% stop store
+	alc_store:stop (StorePid),
 
 	% console output
 	io:format ("Shutdown complete\n"),
@@ -117,5 +156,6 @@ terminate (_Reason, State) ->
 % ---------- code_change
 
 code_change (_OldVsn, State, _Extra) ->
+
 	{ ok, State }.
 

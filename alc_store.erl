@@ -1,5 +1,5 @@
 %
-% Filename: alc_console.erl
+% Filename: alc_store.erl
 %
 % This is part of the Alchemy configuration database. For more
 % information, visit our home on the web at
@@ -21,14 +21,13 @@
 % limitations under the License.
 %
 
--module (alc_console).
+-module (alc_store).
 -behaviour (gen_server).
 
 -include_lib ("amqp_client/include/amqp_client.hrl").
 
 -export ([
-	connect/3,
-	start_link/2,
+	start_link/1,
 	stop/1 ]).
 
 -export ([
@@ -40,66 +39,50 @@
 	code_change/3 ]).
 
 -record (state, {
-	mq,
 	server_name,
-	main_pid,
-	clients }).
+	tables }).
 
 % ==================== public
 
-connect (ConsolePid, ConnId, Who) ->
+% ---------- start_link
 
-	gen_server:call (
-		ConsolePid,
-		{ connect, ConnId, Who }).
-
-start_link (ServerName, Mq) ->
+start_link (ServerName) ->
 
 	gen_server:start_link (
-		{ local, list_to_atom (ServerName ++ "_console") },
+		{ local, list_to_atom (ServerName ++ "_store") },
 		?MODULE,
-		[ ServerName, Mq ],
+		[ ServerName ],
 		[]).
 
-stop (ConsolePid) ->
+% ---------- stop
+
+stop (StorePid) ->
 
 	gen_server:call (
-		ConsolePid,
+		StorePid,
 		stop).
+
+% ---------- store
+
+%store (StorePid, Type, Value) ->
+%
+%	gen_server:call (
+%		StorePid,
+%		{ store, Type, Value }).
 
 % ==================== private
 
 % ---------- init
 
-init ([ ServerName, Mq ]) ->
+init ([ ServerName ]) ->
 
 	% setup state
 	State = #state {
-		mq = Mq,
 		server_name = ServerName,
-		main_pid = list_to_atom (ServerName ++ "_main"),
-		clients = [] },
+		tables = gb_sets:new () },
 
 	% and return
 	{ ok, State }.
-
-% ---------- handle_call connect
-
-handle_call ({ connect, ConnId, Who }, _From, State) ->
-
-	#state {
-		mq = Mq,
-		server_name = ServerName
-	} = State,
-
-	{ ok, ClientPid } =
-		alc_console_client:start_link (
-			Mq,
-			ServerName,
-			ConnId,
-			Who),
-
-	{ reply, ClientPid, State };
 
 % ---------- handle_call stop
 
@@ -110,28 +93,19 @@ handle_call (stop, _From, State) ->
 % ---------- handle_call
 
 handle_call (Request, From, State) ->
-
-	io:format ("alc_console:handle_call (~p, ~p, ~p)\n",
-		[ Request, From, State ]),
-
+	io:format ("alc_store:handle_call (~p, ~p, ~p)\n", [ Request, From, State ]),
 	{ reply, error, State }.
 
 % ---------- handle_cast
 
 handle_cast (Request, State) ->
-
-	io:format ("alc_console:handle_cast (~p, ~p)\n",
-		[ Request, State ]),
-
+	io:format ("alc_store:handle_cast (~p, ~p)\n", [ Request, State ]),
 	{ noreply, State }.
 
 % ---------- handle_info
 
 handle_info (Info, State) ->
-
-	io:format ("alc_console:handle_info (~p, ~p)\n",
-		[ Info, State ]),
-
+	io:format ("alc_store:handle_info (~p, ~p)\n", [ Info, State ]),
 	{ noreply, State }.
 
 % ---------- terminate

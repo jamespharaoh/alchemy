@@ -26,48 +26,53 @@
 
 -include_lib ("amqp_client/include/amqp_client.hrl").
 
+-export ([
+	start_link/4 ]).
+
+-export ([
+	init/1,
+	handle_call/3,
+	handle_cast/2,
+	handle_info/2,
+	terminate/2,
+	code_change/3 ]).
+
 -record (state, {
 	server_name,
 	main_pid,
 	console_pid,
-	mq_connection,
-	mq_channel,
+	mq_client,
 	conn_id,
-	receive_queue,
 	send_queue,
 	who }).
 
--export ([ start_link/4 ]).
--export ([ init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3 ]).
-
 % ==================== public
 
-start_link (ServerName, MqConnection, ConnId, Who) ->
-	GenServerName = { local, list_to_atom (ServerName ++ "_console_" ++ binary_to_list (ConnId)) },
-	gen_server:start_link (GenServerName, ?MODULE, [ ServerName, MqConnection, ConnId, Who ], []).
+start_link (Mq, ServerName, ConnId, Who) ->
+
+	gen_server:start_link (
+		{ local, list_to_atom (
+			ServerName ++ "_console_" ++ binary_to_list (ConnId)) },
+		?MODULE,
+		[ Mq, ServerName, ConnId, Who ],
+		[]).
 
 % ==================== private
 
 % ---------- init
 
-init ([ ServerName, MqConnection, ConnId, Who ]) ->
+init ([ Mq, ServerName, ConnId, Who ]) ->
 
 	MainPid = list_to_atom (ServerName ++ "_main"),
 	ConsolePid = list_to_atom (ServerName ++ "_console"),
 
-	ReceiveQueue = list_to_binary ("alchemy-server-" ++ ConnId),
-	SendQueue = list_to_binary ("alchemy-client-" ++ ConnId),
+	SendQueue = list_to_binary ("alchemy-console-client-" ++ ConnId),
 
-	% open channel
-	{ ok, MqChannel } = amqp_connection:open_channel (MqConnection),
-
-	% create receive queue
-	random:seed (now ()), % TODO this is horrible
-	#'queue.declare_ok' {} = amqp_channel:call (MqChannel, #'queue.declare' { queue = ReceiveQueue }),
-
-	% subscribe to messages
-	Sub = #'basic.consume' { queue = ReceiveQueue },
-	#'basic.consume_ok' { consumer_tag = _Tag } = amqp_channel:subscribe (MqChannel, Sub, self ()),
+	% open mq client
+	{ ok, MqClient } =
+		alc_mq:open (
+			Mq,
+			"alchemy-console-server-" ++ ConnId),
 
 	% output a message
 	io:format ("Connection from ~s (~s)\n", [ Who, ConnId ]),
@@ -76,10 +81,8 @@ init ([ ServerName, MqConnection, ConnId, Who ]) ->
 	State = #state {
 		main_pid = MainPid,
 		console_pid = ConsolePid,
-		mq_connection = MqConnection,
-		mq_channel = MqChannel,
+		mq_client = MqClient,
 		conn_id = ConnId,
-		receive_queue = ReceiveQueue,
 		send_queue = SendQueue,
 		who = Who },
 
@@ -92,30 +95,41 @@ init ([ ServerName, MqConnection, ConnId, Who ]) ->
 % ---------- handle_call
 
 handle_call (Request, From, State) ->
-	io:format ("alc_console_client:handle_call (~p, ~p, ~p)\n", [ Request, From, State ]),
+
+	io:format ("alc_console_client:handle_call (~p, ~p, ~p)\n",
+		[ Request, From, State ]),
+
 	{ reply, error, State }.
 
 % ---------- handle_cast
 
 handle_cast (Request, State) ->
-	io:format ("alc_console_client:handle_cast (~p, ~p)\n", [ Request, State ]),
+
+	io:format ("alc_console_client:handle_cast (~p, ~p)\n",
+		[ Request, State ]),
+
 	{ noreply, State }.
 
 % ---------- handle_info basic.consume_ok
 
 handle_info (#'basic.consume_ok' {}, State) ->
+
 	{ noreply, State };
 
 % ---------- handle_info basic.cancel_ok
 
 handle_info (#'basic.cancel_ok' {}, State) ->
+
 	{ noreply, State };
 
 % ---------- handle_info basic.deliver
 
 handle_info ({ #'basic.deliver' { delivery_tag = Tag }, Message }, State) ->
-	#state { mq_channel = MqChannel } = State,
+
+	#state { mq_client = MqClient } = State,
+
 	#amqp_msg { payload = Payload } = Message,
+
 	Ret = try
 		Data = alc_misc:decode (Payload),
 		handle_message (State, Data)
@@ -123,12 +137,17 @@ handle_info ({ #'basic.deliver' { delivery_tag = Tag }, Message }, State) ->
 		throw:decode_error ->
 			io:format ("MSG: error decoding ~p\n", [ Payload ])
 	end,
-	amqp_channel:cast (MqChannel, #'basic.ack' { delivery_tag = Tag }),
+
+	amqp_channel:cast (
+		alc_mq:client_channel (MqClient),
+		#'basic.ack' { delivery_tag = Tag }),
+
 	Ret.
 
 % ---------- terminate
 
 terminate (_Reason, State) ->
+
 	#state { who = Who, conn_id = ConnId } = State,
 
 	% output a message
@@ -140,6 +159,7 @@ terminate (_Reason, State) ->
 % ---------- code_change
 
 code_change (_OldVsn, State, _Extra) ->
+
 	{ ok, State }.
 
 % ---------- handle_message
@@ -239,11 +259,16 @@ command_shutdown (State) ->
 % ---------- send
 
 mq_send (State, Data) ->
+
 	#state {
-		mq_channel = MqChannel,
+		mq_client = MqClient,
 		send_queue = SendQueue
 	} = State,
+
 	Payload = list_to_binary (mochijson2:encode (Data)),
-	Publish = #'basic.publish' { exchange = <<"">>, routing_key = SendQueue },
-	amqp_channel:cast (MqChannel, Publish, #amqp_msg{ payload = Payload }).
+
+	amqp_channel:cast (
+		alc_mq:client_channel (MqClient),
+		#'basic.publish' { exchange = <<"">>, routing_key = SendQueue },
+		#amqp_msg{ payload = Payload }).
 

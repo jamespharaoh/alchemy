@@ -75,8 +75,8 @@ class AlchemyClient
 
 		@conn_id = gen_random
 		@connect_queue_name = "alchemy-server-#{@server_name}"
-		@receive_queue_name = "alchemy-client-#{@conn_id}"
-		@send_queue_name = "alchemy-server-#{@conn_id}"
+		@receive_queue_name = "alchemy-console-client-#{@conn_id}"
+		@send_queue_name = "alchemy-console-server-#{@conn_id}"
 
 		EventMachine.run do
 

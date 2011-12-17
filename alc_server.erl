@@ -22,92 +22,155 @@
 %
 
 -module (alc_server).
-
--export ([ start/3 ]).
+-behaviour (gen_server).
 
 -include_lib ("amqp_client/include/amqp_client.hrl").
 
--record (state, { main_pid, console_pid, connection, channel }).
+-export ([
+	start_link/3 ]).
 
-start (ConsolePid, Connection, ReceiveQueue) ->
-	MainPid = self (),
+-export ([
+	init/1,
+	handle_call/3,
+	handle_cast/2,
+	handle_info/2,
+	terminate/2,
+	code_change/3 ]).
 
-	spawn_link (fun () ->
+-record (state, {
+	mq_client,
+	console_pid }).
 
-		% open channel
-		{ ok, Channel } = amqp_connection:open_channel (Connection),
+% ==================== public
 
-		% create receive queue
-		#'queue.declare_ok' {} = amqp_channel:call (Channel, #'queue.declare' { queue = ReceiveQueue }),
+start_link (Mq, ServerName, ConsolePid) ->
 
-		% subscribe to messages
-		Sub = #'basic.consume' { queue = ReceiveQueue },
-		#'basic.consume_ok' { consumer_tag = _Tag } = amqp_channel:subscribe (Channel, Sub, self ()),
+	gen_server:start_link (
+		{ local, list_to_atom (ServerName ++ "_server") },
+		?MODULE,
+		[ Mq, ServerName, ConsolePid ],
+		[]).
 
-		% setup state
-		State = #state{
-			main_pid = MainPid,
-			console_pid = ConsolePid,
-			connection = Connection,
-			channel = Channel
-		},
+% ==================== private
 
-		% main loop
-		main_loop (State),
+% ---------- init
 
-		% mq delete queue
-		Delete = #'queue.delete' { queue = ReceiveQueue },
-		#'queue.delete_ok' {} = amqp_channel:call (Channel, Delete),
+init ([ Mq, ServerName, ConsolePid ]) ->
 
-		% close channel
-		amqp_channel:close (Channel),
+	% open mq client
+	{ ok, MqClient } = alc_mq:open (
+		Mq,
+		"alchemy-server-" ++ ServerName),
 
-		% and return
-		ok
-	end).
+	% setup state
+	State = #state {
+		mq_client = MqClient,
+		console_pid = ConsolePid },
 
-main_loop (State) ->
-	#state { channel = Channel } = State,
-	receive
+	% and return
+	{ ok, State }.
 
-		% subscription started
-		#'basic.consume_ok' {} ->
-			main_loop (State);
+% ---------- handle_call
 
-		% subscription cancelled
-		#'basic.cancel_ok' {} ->
-			ok;
+handle_call (Request, From, State) ->
 
-		% message received
-		{ #'basic.deliver' { delivery_tag = Tag }, Message } ->
-			#amqp_msg { payload = Payload } = Message,
-			try
-				Data = alc_misc:decode (Payload),
-				handle (State, Data)
-			catch
-				throw:decode_error ->
-					io:format ("MSG: error decoding ~p\n", [ Payload ])
-			end,
-			amqp_channel:cast (Channel, #'basic.ack' { delivery_tag = Tag }),
-			main_loop (State);
+	io:format ("alc_server:handle_call (~p, ~p, ~p)\n",
+		[ Request, From, State ]),
 
-		% error
-		Any ->
-			io:format ("alc_server: unknown event: ~p\n", [ Any ])
+	{ reply, error, State }.
 
-	end.
+% ---------- handle_cast
+
+handle_cast (Request, State) ->
+
+	io:format ("alc_server:handle_cast (~p, ~p)\n",
+		[ Request, State ]),
+
+	{ noreply, State }.
+
+% ---------- handle_info basic.consume_ok
+
+handle_info (#'basic.consume_ok' {}, State) ->
+
+	{ noreply, State };
+
+% ---------- handle_info basic.cancel_ok
+
+handle_info (#'basic.cancel_ok' {}, State) ->
+
+	{ noreply, State };
+
+% ---------- handle_info basic.deliver
+
+handle_info (
+	{ #'basic.deliver' {
+			delivery_tag = Tag },
+		Message },
+	State) ->
+
+	#amqp_msg { payload = Payload } = Message,
+
+	#state { mq_client = MqClient } = State,
+
+	try
+		Data = alc_misc:decode (Payload),
+		handle (State, Data)
+	catch
+		throw:decode_error ->
+			io:format ("MSG: error decoding ~p\n", [ Payload ])
+	end,
+
+	amqp_channel:cast (
+		alc_mq:client_channel (MqClient),
+		#'basic.ack' { delivery_tag = Tag }),
+
+	{ noreply, State };
+
+% ---------- handle_info
+
+handle_info (Info, State) ->
+
+	io:format ("alc_server:handle_info (~p, ~p)\n",
+		[ Info, State ]),
+
+	{ noreply, State }.
+
+% ---------- terminate
+
+terminate (_Reason, State) ->
+
+	#state {
+		mq_client = MqClient
+	} = State,
+
+	alc_mq:stop (MqClient),
+
+	ok.
+
+% ---------- code_change
+
+code_change (_OldVsn, State, _Extra) ->
+	{ ok, State }.
+
+% ---------- handle
 
 handle (State, Data) ->
+
 	[ RequestTypeBin | Args ] = Data,
+
 	RequestType = list_to_atom (binary_to_list (RequestTypeBin)),
+
 	try
 		handle (RequestType, State, Args)
 	catch
 		error:function_clause ->
-			io:format ("MSG: ignoring invalid function call ~s ~p\n", [ RequestType, Args ])
+			io:format ("MSG: ignoring invalid function call ~s ~p\n",
+				[ RequestType, Args ])
 	end.
 
 handle (console, State, [ ConnId, Who ]) ->
+
 	#state { console_pid = ConsolePid } = State,
+
 	alc_console:connect (ConsolePid, ConnId, Who).
 
