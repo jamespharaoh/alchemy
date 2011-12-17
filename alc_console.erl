@@ -89,7 +89,8 @@ handle_call ({ connect, ConnId, Who }, _From, State) ->
 
 	#state {
 		mq = Mq,
-		server_name = ServerName
+		server_name = ServerName,
+		clients = Clients
 	} = State,
 
 	{ ok, ClientPid } =
@@ -99,7 +100,11 @@ handle_call ({ connect, ConnId, Who }, _From, State) ->
 			ConnId,
 			Who),
 
-	{ reply, ClientPid, State };
+	NewState = State#state {
+		clients = [ ClientPid | Clients ]
+	},
+
+	{ reply, ClientPid, NewState };
 
 % ---------- handle_call stop
 
@@ -136,7 +141,14 @@ handle_info (Info, State) ->
 
 % ---------- terminate
 
-terminate (_Reason, _State) ->
+terminate (_Reason, State) ->
+
+	Clients = State#state.clients,
+
+	lists:foreach (
+		fun (Client) -> alc_console_client:stop (Client) end,
+		Clients),
+
 	ok.
 
 % ---------- code_change

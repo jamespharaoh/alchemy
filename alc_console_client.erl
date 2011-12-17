@@ -27,7 +27,8 @@
 -include_lib ("amqp_client/include/amqp_client.hrl").
 
 -export ([
-	start_link/4 ]).
+	start_link/4,
+	stop/1 ]).
 
 -export ([
 	init/1,
@@ -57,7 +58,13 @@ start_link (Mq, ServerName, ConnId, Who) ->
 		[ Mq, ServerName, ConnId, Who ],
 		[]).
 
-% ==================== private
+stop (Pid) ->
+
+	gen_server:call (
+		Pid,
+		stop).
+
+% ==================== gen_server
 
 % ---------- init
 
@@ -91,6 +98,12 @@ init ([ Mq, ServerName, ConnId, Who ]) ->
 
 	% and return
 	{ ok, State }.
+
+% ---------- handle_call stop
+
+handle_call (stop, _From, State) ->
+
+	{ stop, normal, ok, State };
 
 % ---------- handle_call
 
@@ -148,7 +161,17 @@ handle_info ({ #'basic.deliver' { delivery_tag = Tag }, Message }, State) ->
 
 terminate (_Reason, State) ->
 
-	#state { who = Who, conn_id = ConnId } = State,
+	#state {
+		who = Who,
+		conn_id = ConnId,
+		mq_client = MqClient
+	} = State,
+
+	% close connection
+	mq_send (State, [ <<"terminate">> ]),
+
+	% close mq client
+	alc_mq:close (MqClient),
 
 	% output a message
 	io:format ("Disconnected ~s (~s)\n", [ Who, ConnId ]),
@@ -161,6 +184,8 @@ terminate (_Reason, State) ->
 code_change (_OldVsn, State, _Extra) ->
 
 	{ ok, State }.
+
+% ==================== messages
 
 % ---------- handle_message
 
@@ -185,6 +210,8 @@ handle_message (run_command, State, [ Command ]) ->
 		<<"shutdown">> -> command_shutdown (State);
 		<<_/binary>> -> command_invalid (State, Command)
 	end.
+
+% ==================== commands
 
 % ---------- command_invalid
 
@@ -211,9 +238,6 @@ command_exit (State) ->
 
 	% confirm command
 	mq_send (State, [ <<"command-ok">> ]),
-
-	% close connection
-	mq_send (State, [ <<"terminate">> ]),
 
 	% and end this process
 	{ stop, normal, State }.
@@ -256,7 +280,9 @@ command_shutdown (State) ->
 	% and return
 	{ noreply, State }.
 
-% ---------- send
+% ==================== utils
+
+% ---------- mq_send
 
 mq_send (State, Data) ->
 
