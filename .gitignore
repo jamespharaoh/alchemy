@@ -1,3 +1,4 @@
-mochiweb
+/mochiweb/
 erl_crash.dump
 *.beam
+scratch.erl
