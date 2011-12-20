@@ -1,66 +1,28 @@
+#
+# Filename: features/support/server.rb
+#
+# This is part of the Alchemy configuration database. For more
+# information, visit our home on the web at
+#
+#     https://github.com/jamespharaoh/alchemy
+#
+# Copyright 2011 James Pharaoh
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
 
-def server_start
-	return if $server_started
+$server_list = []
 
-	event_start
-	mq_start
-
-	# generate server name
-	$server_token = (0...10).to_a.map { (?a..?z).to_a.sample }.join
-
-	# listen for startup notification
-	queue = event_do do |cb|
-		$mq_channel.queue \
-			"alchemy-parent-cucumber-#{$server_token}", \
-			:auto_delete => true, \
-			:exclusive => true \
-		do |queue|
-			confirm_cb = lambda { |arg| cb.call queue }
-			queue.subscribe :confirm => confirm_cb do |headers, payload|
-				queue.delete do
-					$mq_parent_cb.call nil
-				end
-			end
-		end
-	end
-
-	# start server
-	args = %W[
-		erl
-		-noshell
-		-bool start_clean
-		-s alc_boot
-		-sname cucumber-#{$server_token}
-		--
-		-alc-server-name cucumber-#{$server_token}
-		-alc-mode hyper
-		-alc-pid-file /tmp/alchemy-cucumber-#{$server_token}.pid
-	]
-	cmd = args.join " "
-	puts cmd
-	system "#{cmd} &"
-
-	# wait for startup notification
-	event_do do |cb|
-		$mq_parent_cb = cb
-	end
-
-	$server_started = true
-	at_exit { server_end }
+def server_start server_name
+	response = hyper_call "start", server_name
 end
-
-def server_end
-	return unless $server_started
-
-	# send terminate to server
-	event_do do |cb|
-		data = [ "shutdown" ]
-		$mq_exchange.publish JSON.dump(data), \
-			:routing_key => "alchemy-hyper-cucumber-#{$server_token}"
-		cb.call nil
-	end
-
-	$server_started = false
-end
-
-server_start

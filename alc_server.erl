@@ -124,9 +124,7 @@ handle_info (
 			io:format ("MSG: error decoding ~p\n", [ Payload ])
 	end,
 
-	amqp_channel:cast (
-		alc_mq:client_channel (MqClient),
-		#'basic.ack' { delivery_tag = Tag }),
+	alc_mq:ack (MqClient, Tag),
 
 	{ noreply, State };
 

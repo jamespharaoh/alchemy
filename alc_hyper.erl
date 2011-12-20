@@ -38,7 +38,9 @@
 	code_change/3 ]).
 
 -record (state, {
-	mq_client }).
+	mq,
+	mq_client,
+	servers }).
 
 % ==================== public
 
@@ -67,7 +69,9 @@ init ([ ServerName, Mq ]) ->
 
 	% setup state
 	State = #state {
-		mq_client = MqClient },
+		mq = Mq,
+		mq_client = MqClient,
+		servers = [] },
 
 	% console output
 	io:format ("Hypervisor ready\n"),
@@ -107,9 +111,7 @@ handle_info ({ #'basic.deliver' { delivery_tag = Tag }, Message }, State) ->
 			io:format ("alc_main:handle_info: error decoding ~p\n", [ Payload ])
 	end,
 
-	amqp_channel:cast (
-		alc_mq:client_channel (State#state.mq_client),
-		#'basic.ack' { delivery_tag = Tag }),
+	alc_mq:ack (State#state.mq_client, Tag),
 
 	Result;
 
@@ -155,9 +157,66 @@ code_change (_OldVsn, State, _Extra) ->
 
 % ==================== deliver
 
+% ---------- deliver reset
+
+deliver ([ <<"reset">>, ClientToken, RequestToken ], State) ->
+
+	io:format ("Hypervisor reset\n", []),
+
+	% stop servers
+	lists:foreach (
+		fun (Pid) ->
+			alc_main:stop (Pid)
+			end,
+		State#state.servers),
+
+	% send response
+	alc_mq:send (
+		State#state.mq_client,
+		<<"alchemy-client-", ClientToken/binary>>,
+		[ <<"reset-ok">>, RequestToken ]),
+
+	% update state
+	NewState = State#state {
+		servers = [] },
+
+	{ noreply, NewState };
+
 % ---------- deliver shutdown
 
 deliver ([ <<"shutdown">> ], State) ->
 
-	{ stop, normal, State }.
+	{ stop, normal, State };
+
+% ---------- deliver start
+
+deliver ([ <<"start">>, ClientToken, RequestToken, ServerName ], State) ->
+
+	io:format ("Hypervisor starting ~s\n", [ ServerName ]),
+
+	% start server
+	{ ok, Main } = alc_main:start_link (
+		State#state.mq,
+		binary_to_list (ServerName)),
+
+	% send response
+	alc_mq:send (
+		State#state.mq_client,
+		<<"alchemy-client-", ClientToken/binary>>,
+		[ <<"start-ok">>, RequestToken ]),
+
+	% update state
+	NewState = State#state {
+		servers = [ Main | State#state.servers ] },
+
+	{ noreply, NewState };
+
+% ---------- deliver
+
+deliver (Message, State) ->
+
+	io:format ("alc_main:deliver (~p, ~p)\n",
+		[ Message, State ]),
+
+	{ noreply, State }.
 

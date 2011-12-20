@@ -1,8 +1,9 @@
+
 Feature: Transactions
 
   Scenario: Begin
 
-    When send a begin message
+    When I send a begin message
     Then I should receive a begin-ok message with a valid transaction id
 
   Scenario: Begin twice

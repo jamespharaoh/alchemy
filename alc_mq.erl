@@ -27,10 +27,12 @@
 -include_lib ("amqp_client/include/amqp_client.hrl").
 
 -export ([
+	ack/2,
 	client_channel/1,
 	close/1,
 	get_connection/1,
 	open/2,
+	send/3,
 	start_link/1,
 	stop/1 ]).
 
@@ -51,6 +53,14 @@
 	tag }).
 
 % ==================== public
+
+% ---------- ack
+
+ack (Client, Tag) ->
+
+	amqp_channel:cast (
+		Client#client.channel,
+		#'basic.ack' { delivery_tag = Tag }).
 
 % ---------- client_channel
 
@@ -132,6 +142,17 @@ open (Pid, ReceiveQueueStr) ->
 
 	% return
 	{ ok, Client }.
+
+% ---------- send
+
+send (Client, SendQueue, Data) ->
+
+	Payload = list_to_binary (mochijson2:encode (Data)),
+
+	amqp_channel:cast (
+		client_channel (Client),
+		#'basic.publish' { exchange = <<"">>, routing_key = SendQueue },
+		#amqp_msg { payload = Payload }).
 
 % ---------- start_link
 

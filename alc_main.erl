@@ -27,7 +27,8 @@
 -include_lib ("amqp_client/include/amqp_client.hrl").
 
 -export ([
-	start_link/2 ]).
+	start_link/2,
+	stop/1 ]).
 
 -export ([
 	init/1,
@@ -52,6 +53,14 @@ start_link (Mq, ServerName) ->
 		?MODULE,
 		[ Mq, ServerName ],
 		[]).
+
+% ---------- stop
+
+stop (Pid) ->
+
+	gen_server:call (
+		Pid,
+		stop).
 
 % ==================== private
 
@@ -96,6 +105,12 @@ init ([ Mq, ServerName ]) ->
 
 	% and return
 	{ ok, State }.
+
+% ---------- handle_call stop
+
+handle_call (stop, _From, State) ->
+
+	{ stop, normal, ok, State };
 
 % ---------- handle_call
 
