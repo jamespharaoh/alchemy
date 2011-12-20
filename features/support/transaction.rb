@@ -22,55 +22,58 @@
 #
 
 Given /^that I have begun a transaction$/ do
-	server_start "alpha"
+	server_call :default, "begin"
+	name, *args = server_response
+	case [ name, args.size ]
+
+		when [ "begin-ok", 1 ]
+			@transaction_token = args [0]
+
+		else
+			raise "Error"
+	end
 end
 
-When /^I send a begin message$/ do
-	pending # express the regexp above with the code you wish you had
+When /^I send a(?:nother)? begin message$/ do
+	server_call :default, "begin"
 end
 
-When /^I send a commit message$/ do
-	pending # express the regexp above with the code you wish you had
+When /^I send a(?:nother)? commit message$/ do
+	server_call :default, "commit", @transaction_token
 end
 
-When /^I send another commit message$/ do
-	pending # express the regexp above with the code you wish you had
-end
-
-When /^I send a rollback message$/ do
-	pending # express the regexp above with the code you wish you had
-end
-
-When /^I Send a rollback message$/ do
-	pending # express the regexp above with the code you wish you had
-end
-
-When /^I send another rollback message$/ do
-	pending # express the regexp above with the code you wish you had
-end
-
-When /^I Send a commit message$/ do
-	pending # express the regexp above with the code you wish you had
+When /^I send a(?:nother)? rollback message$/ do
+	server_call :default, "rollback", @transaction_token
 end
 
 Then /^I should receive a begin\-ok message with a valid transaction id$/ do
-	pending # express the regexp above with the code you wish you had
+	name, *args = server_response
+	name.should == "begin-ok"
+	args.size.should == 1
+	args [0].should match /^[a-z]{10}$/
 end
 
 Then /^I should receive a rollback\-ok message$/ do
-	pending # express the regexp above with the code you wish you had
+	name, *args = server_response
+	name.should == "rollback-ok"
+	args.size.should == 0
 end
 
 Then /^I should receive a rollback\-error message$/ do
-	pending # express the regexp above with the code you wish you had
-end
-
-Then /^I should receive a commit\-error message$/ do
-	pending # express the regexp above with the code you wish you had
+	name, *args = server_response
+	name.should == "rollback-error"
+	args.size.should == 0
 end
 
 Then /^I should receive a commit\-ok message$/ do
-	pending # express the regexp above with the code you wish you had
+	name, *args = server_response
+	name.should == "commit-ok"
+	args.size.should == 0
 end
 
+Then /^I should receive a commit\-error message$/ do
+	name, *args = server_response
+	name.should == "commit-error"
+	args.size.should == 0
+end
 

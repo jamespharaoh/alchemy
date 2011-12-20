@@ -27,7 +27,7 @@
 -include_lib ("amqp_client/include/amqp_client.hrl").
 
 -export ([
-	start_link/3,
+	start_link/4,
 	stop/1 ]).
 
 -export ([
@@ -40,18 +40,19 @@
 
 -record (state, {
 	mq_client,
-	console_pid }).
+	console_pid,
+	store_pid }).
 
 % ==================== public
 
 % ---------- start_link
 
-start_link (Mq, ServerName, ConsolePid) ->
+start_link (Mq, ServerName, ConsolePid, StorePid) ->
 
 	gen_server:start_link (
 		{ local, list_to_atom (ServerName ++ "_server") },
 		?MODULE,
-		[ Mq, ServerName, ConsolePid ],
+		[ Mq, ServerName, ConsolePid, StorePid ],
 		[]).
 
 % ---------- stop
@@ -66,7 +67,7 @@ stop (Pid) ->
 
 % ---------- init
 
-init ([ Mq, ServerName, ConsolePid ]) ->
+init ([ Mq, ServerName, ConsolePid, StorePid ]) ->
 
 	% open mq client
 	{ ok, MqClient } = alc_mq:open (
@@ -76,7 +77,8 @@ init ([ Mq, ServerName, ConsolePid ]) ->
 	% setup state
 	State = #state {
 		mq_client = MqClient,
-		console_pid = ConsolePid },
+		console_pid = ConsolePid,
+		store_pid = StorePid },
 
 	% and return
 	{ ok, State }.
@@ -121,7 +123,7 @@ handle_info (
 		handle (State, Data)
 	catch
 		throw:decode_error ->
-			io:format ("MSG: error decoding ~p\n", [ Payload ])
+			io:format ("alc_server:handle_info: error decoding ~p\n", [ Payload ])
 	end,
 
 	alc_mq:ack (MqClient, Tag),
@@ -164,15 +166,104 @@ handle (State, Data) ->
 
 	try
 		handle (RequestType, State, Args)
+
 	catch
+
 		error:function_clause ->
-			io:format ("MSG: ignoring invalid function call ~s ~p\n",
+			io:format (
+				"alc_server:handle: ignoring invalid function call ~s ~p\n",
 				[ RequestType, Args ])
+
 	end.
+
+% ---------- handle begin
+
+handle ('begin', State, [ ClientToken, RequestToken ]) ->
+
+	% begin transaction
+	{ ok, TransactionToken } =
+		alc_store:'begin' (
+			State#state.store_pid),
+
+	% send response
+	alc_mq:send (
+		State#state.mq_client,
+		<<"alchemy-client-", ClientToken/binary>>,
+		[ <<"begin-ok">>, RequestToken, TransactionToken ]),
+
+	{ noreply, State };
+
+% ---------- handle commit
+
+handle ('commit', State, [ ClientToken, RequestToken, TransactionToken ]) ->
+
+	% commit transaction
+	case alc_store:commit (
+			State#state.store_pid,
+			TransactionToken) of
+
+		ok ->
+			
+			% send response
+			alc_mq:send (
+				State#state.mq_client,
+				<<"alchemy-client-", ClientToken/binary>>,
+				[ <<"commit-ok">>, RequestToken ]);
+
+		token_invalid ->
+
+			% send response
+			alc_mq:send (
+				State#state.mq_client,
+				<<"alchemy-client-", ClientToken/binary>>,
+				[ <<"commit-error">>, RequestToken ])
+
+	end,
+
+	{ noreply, State };
+
+% ---------- handle console
 
 handle (console, State, [ ConnId, Who ]) ->
 
 	#state { console_pid = ConsolePid } = State,
 
-	alc_console:connect (ConsolePid, ConnId, Who).
+	alc_console:connect (ConsolePid, ConnId, Who);
+
+% ---------- handle rollback
+
+handle (rollback, State, [ ClientToken, RequestToken, TransactionToken ]) ->
+
+	% rollback transaction
+	case alc_store:rollback (
+			State#state.store_pid,
+			TransactionToken) of
+
+		ok ->
+			
+			% send response
+			alc_mq:send (
+				State#state.mq_client,
+				<<"alchemy-client-", ClientToken/binary>>,
+				[ <<"rollback-ok">>, RequestToken ]);
+
+		token_invalid ->
+
+			% send response
+			alc_mq:send (
+				State#state.mq_client,
+				<<"alchemy-client-", ClientToken/binary>>,
+				[ <<"rollback-error">>, RequestToken ])
+
+	end,
+
+	{ noreply, State };
+
+% ---------- handle console
+
+handle (Request, State, Args) ->
+
+	io:format (
+		"alc_server:handle (~p, ~p, ~p)\n",
+		[ Request, State, Args ]).
 

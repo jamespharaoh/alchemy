@@ -23,7 +23,8 @@ Feature: Transactions
     Given that I have begun a transaction
     When I send a commit message
     And I send another commit message
-    Then I should receive a commit-error message
+    Then I should receive a commit-ok message
+    And I should receive a commit-error message
 
   Scenario: Rollback
 
@@ -34,21 +35,24 @@ Feature: Transactions
   Scenario: Rollback twice
 
     Given that I have begun a transaction
-    When I Send a rollback message
+    When I send a rollback message
     And I send another rollback message
+    Then I should receive a rollback-ok message
     Then I should receive a rollback-error message
 
   Scenario: Commit then rollback
 
     Given that I have begun a transaction
-    When I Send a commit message
+    When I send a commit message
     And I send a rollback message
+    Then I should receive a commit-ok message
     Then I should receive a rollback-error message
 
   Scenario: Rollback then commit
 
     Given that I have begun a transaction
-    When I Send a rollback message
+    When I send a rollback message
     And I send a commit message
+    Then I should receive a rollback-ok message
     Then I should receive a commit-error message
 

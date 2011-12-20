@@ -25,7 +25,7 @@ require "amqp"
 
 def mq_start
 	return if $mq_started
-	$stderr.puts "mq_start"
+	log "mq_start"
 
 	event_start
 
@@ -46,7 +46,7 @@ end
 
 def mq_stop
 	return unless $mq_started
-	$stderr.puts "mq_stop"
+	log "mq_stop"
 
 	event_do do |cb|
 		$mq_channel.close do
@@ -57,8 +57,4 @@ def mq_stop
 	end
 
 	$mq_started = false
-end
-
-Before do
-	mq_start
 end

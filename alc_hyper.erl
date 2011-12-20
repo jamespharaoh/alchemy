@@ -165,9 +165,7 @@ deliver ([ <<"reset">>, ClientToken, RequestToken ], State) ->
 
 	% stop servers
 	lists:foreach (
-		fun (Pid) ->
-			alc_main:stop (Pid)
-			end,
+		fun (Pid) -> alc_main:stop (Pid) end,
 		State#state.servers),
 
 	% send response
@@ -215,7 +213,7 @@ deliver ([ <<"start">>, ClientToken, RequestToken, ServerName ], State) ->
 
 deliver (Message, State) ->
 
-	io:format ("alc_main:deliver (~p, ~p)\n",
+	io:format ("alc_hyper:deliver (~p, ~p)\n",
 		[ Message, State ]),
 
 	{ noreply, State }.

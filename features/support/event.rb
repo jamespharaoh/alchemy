@@ -26,7 +26,7 @@ require "fiber"
 
 def event_start
 	return if $event_started
-	$stderr.puts "event_start"
+	log "event_start"
 	$event_fiber = Fiber.new do
 		EM.run do
 			Fiber.yield
@@ -34,15 +34,15 @@ def event_start
 	end
 	$event_fiber.resume
 	$event_started = true
+	at_exit { event_stop }
 end
 
 def event_stop
 	return unless $event_started
-	$stderr.puts "event_stop"
+	log "event_stop"
 	EM.stop
 	$event_fiber.resume
 	$event_started = false
-	at_exit { event_stop }
 end
 
 def event_do &block
@@ -52,8 +52,4 @@ def event_do &block
 		block.call lambda { |ret| Fiber.yield ret }
 	end
 	$event_fiber.resume
-end
-
-Before do
-	event_start
 end

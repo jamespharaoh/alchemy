@@ -92,7 +92,8 @@ init ([ Mq, ServerName ]) ->
 	{ ok, ServerPid } = alc_server:start_link (
 		Mq,
 		ServerName,
-		ConsolePid),
+		ConsolePid,
+		StorePid),
 
 	% setup state
 	State = #state {

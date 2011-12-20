@@ -21,8 +21,8 @@
 # limitations under the License.
 #
 
-Before do
-	hyper_start
+After do
+	return unless $hyper_started
 	hyper_reset
 end
 
@@ -31,6 +31,8 @@ def hyper_start
 
 	event_start
 	mq_start
+
+	log "hyper_start"
 
 	# generate server name
 	$hyper_token = gen_token
@@ -63,9 +65,10 @@ def hyper_start
 		-alc-mode hyper
 		-alc-pid-file /tmp/alchemy-cucumber-#{$hyper_token}.pid
 	]
-	cmd = args.join " "
-	puts cmd
-	system "#{cmd} &"
+	cmd = ENV["LOG"] ?
+		"#{args.join " "} &"
+		: "#{args.join " "} >/dev/null &"
+	system cmd
 
 	# wait for startup notification
 	event_do do |cb|
@@ -73,11 +76,13 @@ def hyper_start
 	end
 
 	$hyper_started = true
-	at_exit { hyper_end }
+	at_exit { hyper_stop }
 end
 
-def hyper_end
+def hyper_stop
 	return unless $hyper_started
+
+	log "hyper_stop"
 
 	# send terminate to server
 	event_do do |cb|

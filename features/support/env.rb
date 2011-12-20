@@ -24,3 +24,8 @@
 def gen_token
 	return (0...10).to_a.map { (?a..?z).to_a.sample }.join
 end
+
+def log message
+	return unless ENV["LOG"]
+	$stderr.puts message
+end
