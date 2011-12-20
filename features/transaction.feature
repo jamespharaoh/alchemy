@@ -8,9 +8,10 @@ Feature: Transactions
 
   Scenario: Begin twice
 
-    Given that I have begun a transaction
     When I send a begin message
+    And I send another begin message
     Then I should receive a begin-ok message with a valid transaction id
+    And I should receive a begin-ok message with a valid transaction id
 
   Scenario: Commit
 
@@ -38,7 +39,7 @@ Feature: Transactions
     When I send a rollback message
     And I send another rollback message
     Then I should receive a rollback-ok message
-    Then I should receive a rollback-error message
+    And I should receive a rollback-error message
 
   Scenario: Commit then rollback
 
@@ -46,7 +47,7 @@ Feature: Transactions
     When I send a commit message
     And I send a rollback message
     Then I should receive a commit-ok message
-    Then I should receive a rollback-error message
+    And I should receive a rollback-error message
 
   Scenario: Rollback then commit
 
@@ -54,5 +55,5 @@ Feature: Transactions
     When I send a rollback message
     And I send a commit message
     Then I should receive a rollback-ok message
-    Then I should receive a commit-error message
+    And I should receive a commit-error message
 
