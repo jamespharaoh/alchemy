@@ -41,17 +41,21 @@ Receiving objects: 100% (1735/1735), 753.70 KiB | 409 KiB/s, done.
 Resolving deltas: 100% (1171/1171), done.
 </pre>
 
-Compile the erlang source files:
+Run rake to compile the erlang source files
 
 <pre>
-~alchemy$ erl -make
-Recompile: alc_boot
-Recompile: alc_console
-Recompile: alc_console_client
-Recompile: alc_main
-Recompile: alc_misc
-Recompile: alc_server
-Recompile: mochijson2
+~alchemy$ rake
+erlc -o build erlang/alc_misc.erl
+erlc -o build erlang/mochijson2.erl
+erlc -o build erlang/scratch.erl
+erlc -o build erlang/alc_hyper.erl
+erlc -o build erlang/alc_main.erl
+erlc -o build erlang/alc_console_client.erl
+erlc -o build erlang/alc_boot.erl
+erlc -o build erlang/alc_mq.erl
+erlc -o build erlang/alc_server.erl
+erlc -o build erlang/alc_store.erl
+erlc -o build erlang/alc_console.erl
 </pre>
 
 Next, start the server. This takes a server name, we'll use "test":
@@ -71,7 +75,9 @@ alchemy$ ./alchemy-client test
 test> 
 </pre>
 
-You can enter commands here. When you want to shut down the server, send the command "shutdown":
+You can enter commands here. The "help" command will give you a list of other
+things you can try. When you want to shut down the server, send the command
+"shutdown":
 
 <pre>
 alchemy$ ./alchemy-client test

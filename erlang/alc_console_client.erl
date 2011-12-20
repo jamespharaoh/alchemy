@@ -299,4 +299,3 @@ mq_send (State, Data) ->
 		alc_mq:client_channel (MqClient),
 		#'basic.publish' { exchange = <<"">>, routing_key = SendQueue },
 		#amqp_msg{ payload = Payload }).
-

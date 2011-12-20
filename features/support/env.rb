@@ -21,6 +21,9 @@
 # limitations under the License.
 #
 
+DIR = File.expand_path "#{File.dirname __FILE__}/../.."
+Dir.chdir DIR
+
 def gen_token
 	return (0...10).to_a.map { (?a..?z).to_a.sample }.join
 end

@@ -56,8 +56,9 @@ def hyper_start
 	# start server
 	args = %W[
 		erl
-		-noshell
 		-bool start_clean
+		-noshell
+		-pa build
 		-s alc_boot
 		-sname cucumber-#{$hyper_token}
 		--

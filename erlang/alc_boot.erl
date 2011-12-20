@@ -198,4 +198,3 @@ stop (Reason, _State) ->
 	io:format ("Terminating for reason ~p\n", [ Reason ]),
 
 	halt (1).
-

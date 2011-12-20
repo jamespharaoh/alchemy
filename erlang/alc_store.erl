@@ -57,7 +57,7 @@
 
 	gen_server:call (
 		StorePid,
-		'begin').	
+		'begin').
 
 % ---------- commit
 
@@ -65,7 +65,7 @@ commit (StorePid, TransactionToken) ->
 
 	gen_server:call (
 		StorePid,
-		{ commit, TransactionToken }).	
+		{ commit, TransactionToken }).
 
 % ---------- start_link
 
@@ -83,7 +83,7 @@ rollback (StorePid, TransactionToken) ->
 
 	gen_server:call (
 		StorePid,
-		{ rollback, TransactionToken }).	
+		{ rollback, TransactionToken }).
 
 % ---------- stop
 
@@ -233,4 +233,3 @@ terminate (_Reason, _State) ->
 code_change (_OldVsn, State, _Extra) ->
 
 	{ ok, State }.
-

@@ -203,7 +203,7 @@ handle ('commit', State, [ ClientToken, RequestToken, TransactionToken ]) ->
 			TransactionToken) of
 
 		ok ->
-			
+
 			% send response
 			alc_mq:send (
 				State#state.mq_client,
@@ -240,7 +240,7 @@ handle (rollback, State, [ ClientToken, RequestToken, TransactionToken ]) ->
 			TransactionToken) of
 
 		ok ->
-			
+
 			% send response
 			alc_mq:send (
 				State#state.mq_client,
@@ -266,4 +266,3 @@ handle (Request, State, Args) ->
 	io:format (
 		"alc_server:handle (~p, ~p, ~p)\n",
 		[ Request, State, Args ]).
-

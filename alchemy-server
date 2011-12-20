@@ -25,11 +25,18 @@
 require "pp"
 
 NAME = ARGV[0]
+if NAME == nil
+	$stderr.puts "Syntax: #{$0} SERVER-NAME"
+	exit 1
+end
+
+DIR = File.dirname __FILE__
 
 args = %W[
 	erl
 	-noshell
 	-bool start_clean
+	-pa #{DIR}/build
 	-s alc_boot
 	-sname alchemy-server-#{NAME}
 	--

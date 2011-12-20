@@ -1,5 +1,5 @@
 %
-% Filename: alc_console.erl
+% Filename: alc_main.erl
 %
 % This is part of the Alchemy configuration database. For more
 % information, visit our home on the web at
@@ -21,13 +21,12 @@
 % limitations under the License.
 %
 
--module (alc_console).
+-module (alc_main).
 -behaviour (gen_server).
 
 -include_lib ("amqp_client/include/amqp_client.hrl").
 
 -export ([
-	connect/3,
 	start_link/2,
 	stop/1 ]).
 
@@ -41,70 +40,72 @@
 
 -record (state, {
 	mq,
-	server_name,
-	main_pid,
-	clients }).
+	store_pid,
+	console_pid,
+	server_pid }).
 
 % ==================== public
 
-connect (ConsolePid, ConnId, Who) ->
-
-	gen_server:call (
-		ConsolePid,
-		{ connect, ConnId, Who }).
-
-start_link (ServerName, Mq) ->
+start_link (Mq, ServerName) ->
 
 	gen_server:start_link (
-		{ local, list_to_atom (ServerName ++ "_console") },
+		{ local, list_to_atom (ServerName ++ "_main") },
 		?MODULE,
-		[ ServerName, Mq ],
+		[ Mq, ServerName ],
 		[]).
 
-stop (ConsolePid) ->
+% ---------- stop
+
+stop (Pid) ->
 
 	gen_server:call (
-		ConsolePid,
+		Pid,
 		stop).
 
 % ==================== private
 
 % ---------- init
 
-init ([ ServerName, Mq ]) ->
+init ([ Mq, ServerName ]) ->
+
+	io:format ("Alchemy (development version)\n"),
+	io:format ("Server name: ~s\n", [ ServerName ]),
+
+	io:format ("Starting store\n"),
+
+	% start store
+	{ ok, StorePid } =
+		alc_store:start_link (
+			ServerName),
+
+	io:format ("Starting console\n"),
+
+	% start console
+	{ ok, ConsolePid } =
+		alc_console:start_link (
+			ServerName,
+			Mq),
+
+	io:format ("Starting server\n"),
+
+	% start server
+	{ ok, ServerPid } = alc_server:start_link (
+		Mq,
+		ServerName,
+		ConsolePid,
+		StorePid),
 
 	% setup state
 	State = #state {
 		mq = Mq,
-		server_name = ServerName,
-		main_pid = list_to_atom (ServerName ++ "_main"),
-		clients = [] },
+		store_pid = StorePid,
+		console_pid = ConsolePid,
+		server_pid = ServerPid },
+
+	io:format ("Ready\n"),
 
 	% and return
 	{ ok, State }.
-
-% ---------- handle_call connect
-
-handle_call ({ connect, ConnId, Who }, _From, State) ->
-
-	#state {
-		mq = Mq,
-		server_name = ServerName,
-		clients = Clients
-	} = State,
-
-	{ ok, ClientPid } =
-		alc_console_client:start_link (
-			Mq,
-			ServerName,
-			ConnId,
-			Who),
-
-	NewState = State#state {
-		clients = [ ClientPid | Clients ]
-	},
-
-	{ reply, ClientPid, NewState };
 
 % ---------- handle_call stop
 
@@ -116,7 +117,7 @@ handle_call (stop, _From, State) ->
 
 handle_call (Request, From, State) ->
 
-	io:format ("alc_console:handle_call (~p, ~p, ~p)\n",
+	io:format ("alc_main:handle_call (~p, ~p, ~p)\n",
 		[ Request, From, State ]),
 
 	{ reply, error, State }.
@@ -125,16 +126,22 @@ handle_call (Request, From, State) ->
 
 handle_cast (Request, State) ->
 
-	io:format ("alc_console:handle_cast (~p, ~p)\n",
+	io:format ("alc_main:handle_cast (~p, ~p)\n",
 		[ Request, State ]),
 
 	{ noreply, State }.
+
+% ---------- handle_info shutdown
+
+handle_info ({ shutdown }, State) ->
+
+	{ stop, normal, State };
 
 % ---------- handle_info
 
 handle_info (Info, State) ->
 
-	io:format ("alc_console:handle_info (~p, ~p)\n",
+	io:format ("alc_main:handle_info (~p, ~p)\n",
 		[ Info, State ]),
 
 	{ noreply, State }.
@@ -143,16 +150,36 @@ handle_info (Info, State) ->
 
 terminate (_Reason, State) ->
 
-	Clients = State#state.clients,
+	#state {
+		store_pid = StorePid,
+		console_pid = ConsolePid,
+		server_pid = ServerPid
+	} = State,
 
-	lists:foreach (
-		fun (Client) -> alc_console_client:stop (Client) end,
-		Clients),
+	io:format ("Shutting down\n"),
+
+	io:format ("Stopping server\n"),
+
+	% stop server
+	alc_server:stop (ServerPid),
+
+	io:format ("Stopping console\n"),
+
+	% stop console
+	alc_console:stop (ConsolePid),
+
+	io:format ("Stopping store\n"),
+
+	% stop store
+	alc_store:stop (StorePid),
+
+	% console output
+	io:format ("Shutdown complete\n"),
 
 	ok.
 
 % ---------- code_change
 
 code_change (_OldVsn, State, _Extra) ->
-	{ ok, State }.
 
+	{ ok, State }.

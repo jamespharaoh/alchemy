@@ -217,4 +217,3 @@ deliver (Message, State) ->
 		[ Message, State ]),
 
 	{ noreply, State }.
-
