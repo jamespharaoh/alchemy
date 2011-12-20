@@ -51,7 +51,15 @@ end
 
 def server_end
 	return unless $server_started
-	$stderr.puts "TODO: END SERVER PLEASE"
+
+	# send terminate to server
+	event_do do |cb|
+		data = [ "shutdown" ]
+		$mq_exchange.publish JSON.dump(data), \
+			:routing_key => "alchemy-hyper-cucumber-#{$server_token}"
+		cb.call nil
+	end
+
 	$server_started = false
 end
 

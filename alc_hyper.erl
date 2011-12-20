@@ -93,6 +93,26 @@ handle_cast (Request, State) ->
 
 	{ noreply, State }.
 
+% ---------- handle_info basic.deliver
+
+handle_info ({ #'basic.deliver' { delivery_tag = Tag }, Message }, State) ->
+
+	#amqp_msg { payload = Payload } = Message,
+
+	Result = try
+		Data = alc_misc:decode (Payload),
+		deliver (Data, State)
+	catch
+		throw:decode_error ->
+			io:format ("alc_main:handle_info: error decoding ~p\n", [ Payload ])
+	end,
+
+	amqp_channel:cast (
+		alc_mq:client_channel (State#state.mq_client),
+		#'basic.ack' { delivery_tag = Tag }),
+
+	Result;
+
 % ---------- handle_info shutdown
 
 handle_info ({ shutdown }, State) ->
@@ -132,4 +152,12 @@ terminate (_Reason, State) ->
 code_change (_OldVsn, State, _Extra) ->
 
 	{ ok, State }.
+
+% ==================== deliver
+
+% ---------- deliver shutdown
+
+deliver ([ <<"shutdown">> ], State) ->
+
+	{ stop, normal, State }.
 
