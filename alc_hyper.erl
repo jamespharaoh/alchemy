@@ -26,12 +26,23 @@
 
 -include_lib ("amqp_client/include/amqp_client.hrl").
 
--export ([ start_link/2 ]).
--export ([ init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3 ]).
+-export ([
+	start_link/2 ]).
 
--record (state, { mq_client }).
+-export ([
+	init/1,
+	handle_call/3,
+	handle_cast/2,
+	handle_info/2,
+	terminate/2,
+	code_change/3 ]).
+
+-record (state, {
+	mq_client }).
 
 % ==================== public
+
+% --------- start_link
 
 start_link (Mq, ServerName) ->
 

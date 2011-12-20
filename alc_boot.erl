@@ -25,15 +25,22 @@
 
 -include_lib ("amqp_client/include/amqp_client.hrl").
 
--export ([ start/0 ]).
+-export ([
+	start/0 ]).
 
--record (state, { mq, main }).
+-record (state, {
+	mq,
+	main }).
 
 start () ->
 
 	% process args
-	Args = init:get_plain_arguments (),
-	[ Mode, ServerName ] = Args,
+	ServerName = server_name (),
+	Mode = mode (),
+	PidFile = pid_file (),
+
+	% write pid file
+	write_pid (PidFile),
 
 	% start mq process
 	{ ok, Mq } =
@@ -42,10 +49,10 @@ start () ->
 	% start main process
 	{ ok, Main } = case Mode of
 
-		"hyper" ->
+		hyper ->
 			alc_hyper:start_link (Mq, ServerName);
 
-		"simple" ->
+		simple ->
 			alc_main:start_link (Mq, ServerName)
 
 	end,
@@ -77,7 +84,7 @@ notify_parent (Mq, ServerName) ->
 		Channel,
 		#'basic.publish' {
 			exchange = <<"">>,
-			routing_key = list_to_binary ("alchemy-notify-" ++ ServerName) },
+			routing_key = list_to_binary ("alchemy-parent-" ++ ServerName) },
 		#amqp_msg{ payload = Payload }),
 
 	% close channel
@@ -85,6 +92,76 @@ notify_parent (Mq, ServerName) ->
 
 	% return
 	ok.
+
+server_name () ->
+
+	case init:get_argument ('alc-server-name') of
+
+		{ ok, [ [ Value ] ] } ->
+			Value;
+
+		error ->
+			io:format ("Must specify -alc-mode\n"),
+			halt (1)
+	end.
+
+mode () ->
+
+	case init:get_argument ('alc-mode') of
+
+		{ ok, [ [ ModeString ] ] } ->
+
+			Mode = list_to_atom (ModeString),
+			case lists:member (Mode, [ hyper, simple ]) of
+
+				true ->
+					list_to_atom (ModeString);
+
+				false ->
+					io:format ("Invalid mode: ~s\n", [ ModeString ]),
+					halt (1)
+
+			end;
+
+		error ->
+			io:format ("Must specify -alc-mode\n"),
+			halt (1)
+	end.
+
+write_pid (Filename) ->
+
+	case Filename of
+
+		X when is_list (X) ->
+
+			% open file
+			{ ok, File } =
+				file:open (Filename, [ write ]),
+
+			% write pid
+			io:format (File, "~s\n", [ os:getpid () ]),
+
+			% close file
+			ok = file:close (File),
+
+			ok;
+
+		undefined ->
+
+			ok
+	end.
+
+pid_file () ->
+
+	case init:get_argument ('alc-pid-file') of
+
+		{ ok, [ [ Filename ] ] } ->
+			Filename;
+
+		error ->
+			undefined
+
+	end.
 
 loop (State) ->
 
