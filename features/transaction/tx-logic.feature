@@ -3,15 +3,15 @@ Feature: Transaction logic
 
   Scenario: Begin
 
-    When I send a begin message
-    Then I should receive a begin-ok message
+     When I send a begin message
+     Then I should receive a begin-ok message
 
   Scenario: Begin twice
 
-    When I send a begin message
-     And I send another begin message
-    Then I should receive a begin-ok message
-     And I should receive a begin-ok message
+     When I send a begin message
+      And I send another begin message
+     Then I should receive a begin-ok message
+      And I should receive a begin-ok message
 
   Scenario: Commit
 
