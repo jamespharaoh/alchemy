@@ -8,7 +8,10 @@ task :default => [ :compile ]
 
 task :compile do
 
-	FileUtils.mkdir_p "build"
+	unless Dir.exist? ".build"
+		cmd = "mkdir .build"
+		system cmd or exit 1
+	end
 
 	Dir.glob("erlang/*.erl").each do |source|
 		name = File.basename source, ".erl"
