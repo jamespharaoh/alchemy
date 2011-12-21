@@ -216,9 +216,9 @@ handle ('commit', State, [ ClientToken, RequestToken, TransactionToken ]) ->
 			alc_mq:send (
 				State#state.mq_client,
 				<<"alchemy-client-", ClientToken/binary>>,
-				[ <<"commit-error">>, RequestToken ])
+				[ <<"transaction-token-invalid">>, RequestToken ])
 
-	end,
+		end,
 
 	{ noreply, State };
 
@@ -230,9 +230,33 @@ handle (console, State, [ ConnId, Who ]) ->
 
 	alc_console:connect (ConsolePid, ConnId, Who);
 
+% ---------- handle fetch
+
+handle (fetch, State,
+	[ ClientToken, RequestToken, TransactionToken, Keys ]) ->
+
+	% perform fetch
+	case alc_store:fetch (
+			State#state.store_pid,
+			TransactionToken,
+			Keys) of
+
+		{ ok, Values } ->
+
+			% send response
+			alc_mq:send (
+				State#state.mq_client,
+				<<"alchemy-client-", ClientToken/binary>>,
+				[ <<"fetch-ok">>, RequestToken, Values ])
+
+		end,
+
+	{ noreply, State };
+
 % ---------- handle rollback
 
-handle (rollback, State, [ ClientToken, RequestToken, TransactionToken ]) ->
+handle (rollback, State,
+	[ ClientToken, RequestToken, TransactionToken ]) ->
 
 	% rollback transaction
 	case alc_store:rollback (
@@ -253,11 +277,40 @@ handle (rollback, State, [ ClientToken, RequestToken, TransactionToken ]) ->
 			alc_mq:send (
 				State#state.mq_client,
 				<<"alchemy-client-", ClientToken/binary>>,
-				[ <<"rollback-error">>, RequestToken ])
+				[ <<"transaction-token-invalid">>, RequestToken ])
+
+		end,
+
+	{ noreply, State };
+
+% ---------- handle update
+
+handle (update, State,
+	[ ClientToken, RequestToken, TransactionToken, UpdateLists ]) ->
+
+	Updates =
+		lists:map (
+			fun erlang:list_to_tuple/1,
+			UpdateLists),
+
+	% perform update
+	case alc_store:update (
+			State#state.store_pid,
+			TransactionToken,
+			Updates) of
+
+		ok ->
+
+			% send response
+			alc_mq:send (
+				State#state.mq_client,
+				<<"alchemy-client-", ClientToken/binary>>,
+				[ <<"update-ok">>, RequestToken ])
 
 	end,
 
 	{ noreply, State };
+
 
 % ---------- handle console
 

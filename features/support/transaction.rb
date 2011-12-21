@@ -21,7 +21,7 @@
 # limitations under the License.
 #
 
-Given /^that I have begun a transaction$/ do
+Given /^I have begun a transaction$/ do
 	server_call :default, "begin"
 	name, *args = server_response
 	case [ name, args.size ]
@@ -34,7 +34,7 @@ Given /^that I have begun a transaction$/ do
 	end
 end
 
-Given /^that I have not begun a transaction$/ do
+Given /^I have not begun a transaction$/ do
 	@transaction_token = gen_token
 end
 
@@ -50,7 +50,28 @@ When /^I send a(?:nother)? rollback message$/ do
 	server_call :default, "rollback", @transaction_token
 end
 
-Then /^I should receive a begin\-ok message with a valid transaction id$/ do
+def parse_array string
+	return YAML::load "[#{string}]"
+end
+
+def parse_object string
+	return YAML::load "{#{string}}"
+end
+
+def parse_any string
+	return YAML::load string
+end
+
+When /^I send an update message containing:$/ do |table|
+	updates = table.hashes.map { |hash| [
+		parse_array(hash["key"]),
+		hash["rev"].empty? ? nil : hash["rev"],
+		parse_object(hash["value"]),
+	] }
+	server_call :default, "update", @transaction_token, updates
+end
+
+Then /^I should receive a begin\-ok message$/ do
 	name, *args = server_response
 	name.should == "begin-ok"
 	args.size.should == 1
@@ -63,21 +84,31 @@ Then /^I should receive a rollback\-ok message$/ do
 	args.size.should == 0
 end
 
-Then /^I should receive a rollback\-error message$/ do
-	name, *args = server_response
-	name.should == "rollback-error"
-	args.size.should == 0
-end
-
 Then /^I should receive a commit\-ok message$/ do
 	name, *args = server_response
 	name.should == "commit-ok"
 	args.size.should == 0
 end
 
-Then /^I should receive a commit\-error message$/ do
+Then /^I should receive an update\-ok message$/ do
 	name, *args = server_response
-	name.should == "commit-error"
+	name.should == "update-ok"
 	args.size.should == 0
 end
 
+Then /^I should receive a transaction\-token\-invalid message$/ do
+	name, *args = server_response
+	name.should == "transaction-token-invalid"
+	args.size.should == 0
+end
+
+Then /^the following rows should exist:$/ do |table|
+	keys = table.hashes.map { |hash| parse_array hash["key"] }
+	server_call :default, "fetch", @transaction_token, keys
+	name, *args = server_response
+	name.should == "fetch-ok"
+	args.size.should == 1
+	values = args [0]
+	expect = table.hashes.map { |hash| parse_object hash["value"] }
+	values.should == expect
+end

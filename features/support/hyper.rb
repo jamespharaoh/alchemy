@@ -22,7 +22,6 @@
 #
 
 After do
-	return unless $hyper_started
 	hyper_reset
 end
 
@@ -143,6 +142,8 @@ def hyper_call name, *args
 end
 
 def hyper_reset
+	return unless $hyper_started
+
 	name, *args = hyper_call "reset"
 	case [ name, args.size ]
 

@@ -27,11 +27,15 @@
 -include_lib ("amqp_client/include/amqp_client.hrl").
 
 -export ([
-	'begin'/1,
-	commit/2,
-	rollback/2,
 	start_link/1,
 	stop/1 ]).
+
+-export ([
+	'begin'/1,
+	commit/2,
+	fetch/3,
+	rollback/2,
+	update/3 ]).
 
 -export ([
 	init/1,
@@ -47,9 +51,30 @@
 	transactions }).
 
 -record (transaction, {
-	token }).
+	token,
+	updates }).
 
-% ==================== public
+% ==================== public lifecycle
+
+% ---------- start_link
+
+start_link (ServerName) ->
+
+	gen_server:start_link (
+		{ local, list_to_atom (ServerName ++ "_store") },
+		?MODULE,
+		[ ServerName ],
+		[]).
+
+% ---------- stop
+
+stop (StorePid) ->
+
+	gen_server:call (
+		StorePid,
+		stop).
+
+% ==================== public general
 
 % ---------- begin
 
@@ -67,15 +92,13 @@ commit (StorePid, TransactionToken) ->
 		StorePid,
 		{ commit, TransactionToken }).
 
-% ---------- start_link
+% ---------- fetch
 
-start_link (ServerName) ->
+fetch (StorePid, TransactionToken, Keys) ->
 
-	gen_server:start_link (
-		{ local, list_to_atom (ServerName ++ "_store") },
-		?MODULE,
-		[ ServerName ],
-		[]).
+	gen_server:call (
+		StorePid,
+		{ fetch, TransactionToken, Keys }).
 
 % ---------- rollback
 
@@ -85,13 +108,13 @@ rollback (StorePid, TransactionToken) ->
 		StorePid,
 		{ rollback, TransactionToken }).
 
-% ---------- stop
+% ---------- update
 
-stop (StorePid) ->
+update (StorePid, TransactionToken, Updates) ->
 
 	gen_server:call (
 		StorePid,
-		stop).
+		{ update, TransactionToken, Updates }).
 
 % ==================== private
 
@@ -120,20 +143,15 @@ handle_call ('begin', _From, State) ->
 
 	Token = list_to_binary (alc_misc:gen_random ()),
 
-	io:format ("BEGIN ~s\n",
-		[ Token ]),
-
 	Transaction = #transaction {
-		token = Token },
+		token = Token,
+		updates = gb_trees:empty () },
 
 	NewState = State#state {
-		transactions =
-			gb_trees:enter (
-				Token,
-				Transaction,
-				State#state.transactions) },
-
-io:format ("STATE: ~p\n", [ NewState ]),
+		transactions = gb_trees:enter (
+			Token,
+			Transaction,
+			State#state.transactions) },
 
 	{ reply, { ok, Token }, NewState };
 
@@ -141,9 +159,6 @@ io:format ("STATE: ~p\n", [ NewState ]),
 
 handle_call ({ commit, TransactionToken }, _From, State) ->
 
-	io:format ("COMMIT ~s\n",
-		[ TransactionToken ]),
-
 	case gb_trees:is_defined (
 			TransactionToken,
 			State#state.transactions) of
@@ -151,12 +166,9 @@ handle_call ({ commit, TransactionToken }, _From, State) ->
 		true ->
 
 			NewState = State#state {
-				transactions =
-					gb_trees:delete (
-						TransactionToken,
-						State#state.transactions) },
-
-io:format ("STATE: ~p\n", [ NewState ]),
+				transactions = gb_trees:delete (
+					TransactionToken,
+					State#state.transactions) },
 
 			{ reply, ok, NewState };
 
@@ -164,15 +176,45 @@ io:format ("STATE: ~p\n", [ NewState ]),
 
 			{ reply, token_invalid, State }
 
-	end;
+		end;
+
+% ---------- handle_call fetch
+
+handle_call ({ fetch, TransactionToken, Keys }, _From, State) ->
+
+	case gb_trees:is_defined (
+			TransactionToken,
+			State#state.transactions) of
+
+		true ->
+
+			Transaction = gb_trees:get (
+				TransactionToken,
+				State#state.transactions),
+
+			Rows = lists:map (
+				fun (Key) ->
+					case gb_trees:lookup (
+							Key,
+							Transaction#transaction.updates) of
+						{ value, Value } -> Value;
+						none -> null
+						end
+					end,
+				Keys),
+
+			{ reply, { ok, Rows }, State };
+
+		false ->
+
+			{ reply, token_invalid, State }
+
+		end;
 
 % ---------- handle_call rollback
 
 handle_call ({ rollback, TransactionToken }, _From, State) ->
 
-	io:format ("ROLLBACK ~s\n",
-		[ TransactionToken ]),
-
 	case gb_trees:is_defined (
 			TransactionToken,
 			State#state.transactions) of
@@ -185,7 +227,44 @@ handle_call ({ rollback, TransactionToken }, _From, State) ->
 						TransactionToken,
 						State#state.transactions) },
 
-io:format ("STATE: ~p\n", [ NewState ]),
+			{ reply, ok, NewState };
+
+		false ->
+
+			{ reply, token_invalid, State }
+
+		end;
+
+% ---------- handle_call update
+
+handle_call ({ update, TransactionToken, Updates }, _From, State) ->
+
+	case gb_trees:is_defined (
+			TransactionToken,
+			State#state.transactions) of
+
+		true ->
+
+			Transaction = gb_trees:get (
+				TransactionToken,
+				State#state.transactions),
+
+			NewTransaction = Transaction#transaction {
+				updates = lists:foldl (
+					fun ({ Key, _Rev, Value }, Tree) ->
+						gb_trees:enter (
+							Key,
+							Value,
+							Tree)
+						end,
+					Transaction#transaction.updates,
+					Updates) },
+
+			NewState = State#state {
+				transactions = gb_trees:enter (
+					TransactionToken,
+					NewTransaction,
+					State#state.transactions) },
 
 			{ reply, ok, NewState };
 
@@ -193,7 +272,7 @@ io:format ("STATE: ~p\n", [ NewState ]),
 
 			{ reply, token_invalid, State }
 
-	end;
+		end;
 
 % ---------- handle_call
 
