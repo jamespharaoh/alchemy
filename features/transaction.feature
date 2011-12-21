@@ -27,6 +27,12 @@ Feature: Transactions
     Then I should receive a commit-ok message
     And I should receive a commit-error message
 
+  Scenario: Commit invalid
+
+    Given that I have not begun a transaction
+    When I send a commit message
+    Then I should receive a commit-error message
+
   Scenario: Rollback
 
     Given that I have begun a transaction
@@ -40,6 +46,12 @@ Feature: Transactions
     And I send another rollback message
     Then I should receive a rollback-ok message
     And I should receive a rollback-error message
+
+  Scenario: Rollback invalid
+
+    Given that I have not begun a transaction
+    When I send a rollback message
+    Then I should receive a rollback-error message
 
   Scenario: Commit then rollback
 

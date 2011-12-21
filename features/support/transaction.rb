@@ -34,6 +34,10 @@ Given /^that I have begun a transaction$/ do
 	end
 end
 
+Given /^that I have not begun a transaction$/ do
+	@transaction_token = gen_token
+end
+
 When /^I send a(?:nother)? begin message$/ do
 	server_call :default, "begin"
 end
