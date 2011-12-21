@@ -12,9 +12,9 @@ task :compile do
 
 	Dir.glob("erlang/*.erl").each do |source|
 		name = File.basename source, ".erl"
-		target = "build/#{name}.beam"
+		target = ".build/#{name}.beam"
 		next if FileUtils.uptodate? target, [ source ]
-		cmd = "erlc -o build #{source}"
+		cmd = "erlc -o .build #{source}"
 		puts cmd
 		system cmd or exit 1
 	end

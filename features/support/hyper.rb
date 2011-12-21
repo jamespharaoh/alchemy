@@ -58,7 +58,7 @@ def hyper_start
 		erl
 		-bool start_clean
 		-noshell
-		-pa build
+		-pa .build
 		-s alc_boot
 		-sname cucumber-#{$hyper_token}
 		--

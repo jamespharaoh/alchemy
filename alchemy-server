@@ -36,7 +36,7 @@ args = %W[
 	erl
 	-noshell
 	-bool start_clean
-	-pa #{DIR}/build
+	-pa .build
 	-s alc_boot
 	-sname alchemy-server-#{NAME}
 	--
