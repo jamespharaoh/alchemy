@@ -185,9 +185,9 @@ handle_call ({ update, TransactionToken, Updates }, _From, State1) ->
 
 	case do_update (State1, TransactionToken, Updates) of
 
-		{ ok, State2 } ->
+		{ ok, State2, Revs } ->
 
-			{ reply, ok, State2 };
+			{ reply, { ok, Revs }, State2 };
 
 		error ->
 
@@ -242,10 +242,10 @@ do_apply_updates (Iter1) ->
 
 	case gb_trees:next (Iter1) of
 
-		{ Key, Val, Iter2 } ->
+		{ Key, { Rev, Val }, Iter2 } ->
 
 			% insert the row
-			dets:insert (data, { Key, Val }),
+			dets:insert (data, { Key, Rev, Val }),
 
 			% tail recurse
 			do_apply_updates (Iter2);
@@ -344,10 +344,10 @@ do_fetch_one (Updates, Key) ->
 	case gb_trees:lookup (Key, Updates) of
 
 		% if found
-		{ value, Value } ->
+		{ value, { Rev, Val } } ->
 
 			% return it
-			Value;
+			{ Rev, Val };
 
 		% if not found
 		none ->
@@ -356,10 +356,10 @@ do_fetch_one (Updates, Key) ->
 			case dets:lookup (data, Key) of
 
 				% if found
-				[ Value ] ->
+				[ { Key, Rev, Val } ] ->
 
 					% return it
-					Value;
+					{ Rev, Val };
 
 				% if not found
 				[] ->
@@ -397,8 +397,8 @@ do_update (State1, TransactionToken, Updates) ->
 	% check for errors
 	Errors = lists:flatten (
 		lists:map (
-			fun ({ Key, _Rev, _Value }) ->
-				do_update_check (TransactionUpdates, Key)
+			fun ({ Key, Rev, _Value }) ->
+				do_update_check (TransactionUpdates, Key, Rev)
 				end,
 			Updates)),
 
@@ -407,14 +407,26 @@ do_update (State1, TransactionToken, Updates) ->
 		% no errors
 		[] ->
 
+			% iterate updates
+			{ Updates2, RevsX } = lists:foldl (
+				fun ({ Key, _Rev, Value }, { Tree1, Revs }) ->
+
+					% generate revision
+					NewRev = list_to_binary (alc_misc:gen_random ()),
+
+					% update updates tree
+					Tree2 = gb_trees:enter (Key, { NewRev, Value }, Tree1),
+
+					{ Tree2, [ NewRev | Revs ] }
+					end,
+				{ TransactionUpdates, [] },
+				Updates),
+
+			Revs = lists:reverse (RevsX),
+
 			% update transaction
 			Transaction2 = Transaction1#transaction {
-				updates = lists:foldl (
-					fun ({ Key, _Rev, Value }, Tree) ->
-						gb_trees:enter (Key, Value, Tree)
-						end,
-					TransactionUpdates,
-					Updates) },
+				updates = Updates2 },
 
 			% update state
 			State2 = State1#state {
@@ -424,7 +436,7 @@ do_update (State1, TransactionToken, Updates) ->
 					State1#state.transactions) },
 
 			% return ok
-			{ ok, State2 };
+			{ ok, State2, Revs };
 
 		% update errors
 		_ ->
@@ -436,34 +448,70 @@ do_update (State1, TransactionToken, Updates) ->
 
 % ---------- do_update_check
 
-do_update_check (Updates, Key) ->
+do_update_check (Updates, Key, Rev) ->
+
+	% check for conflict with current transaction
+	case do_update_check_transaction (Updates, Key, Rev) of
+
+		% got error, return it
+		[ Error ] -> [ Error ];
+
+		% no error, check for conflict in database
+		[] -> case do_update_check_committed (Key, Rev) of
+
+			% got error, return it
+			[ Error ] -> [ Error ];
+
+			% no error, return ok
+			[] -> []
+
+			end
+		end.
+
+do_update_check_transaction (Updates, Key, Rev) ->
 
 	% check for key in transaction
-	case gb_trees:is_defined (Key, Updates) of
+	case gb_trees:lookup (Key, Updates) of
 
-		% if found
-		true ->
+		% found
+		{ value, { OldRev, _OldVal } } ->
 
-			% return error
-			[ exists_in_transaction ];
+			% check if the revision matches
+			if
 
-		% if not found
-		false ->
+				% if so return ok
+				Rev == OldRev -> [];
 
-			% check for key in database
-			case dets:lookup (data, Key) of
+				% otherwise return an error
+				true -> [ revision_mismatch ]
 
-				% if found
-				[ _Val ] ->
+			end;
 
-					% return error
-					[ exists_on_disk ];
+		% not found, return ok
+		none -> []
 
-				% if not found
-				[] ->
+		end.
 
-					% return ok
-					[]
+do_update_check_committed (Key, Rev) ->
 
-				end
+	% lookup key in database
+	case dets:lookup (data, Key) of
+
+		% found
+		[ { Key, OldRev, _OldVal } ] ->
+
+			% check if the revision matches
+			if
+
+				% if so return ok
+				Rev == OldRev -> [];
+
+				% otherwise return an error
+				true -> [ revision_mismatch ]
+
+			end;
+
+		% not found, return ok
+		[] -> []
+
 		end.

@@ -238,13 +238,16 @@ handle (fetch, State,
 			TransactionToken,
 			Keys) of
 
-		{ ok, Values } ->
+		{ ok, RowTuples } ->
+
+			% convert response
+			RowLists = lists:map (fun erlang:tuple_to_list/1, RowTuples),
 
 			% send response
 			alc_mq:send (
 				State#state.mq_client,
 				<<"alchemy-client-", ClientToken/binary>>,
-				[ <<"fetch-ok">>, RequestToken, Values ])
+				[ <<"fetch-ok">>, RequestToken, RowLists ])
 
 		end,
 
@@ -296,13 +299,13 @@ handle (update, State,
 			TransactionToken,
 			Updates) of
 
-		ok ->
+		{ ok, Revs } ->
 
 			% send response
 			alc_mq:send (
 				State#state.mq_client,
 				<<"alchemy-client-", ClientToken/binary>>,
-				[ <<"update-ok">>, RequestToken ]);
+				[ <<"update-ok">>, RequestToken, Revs ]);
 
 		error ->
 

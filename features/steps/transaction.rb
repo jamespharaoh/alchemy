@@ -23,6 +23,7 @@
 
 Before do
 	@transaction_token = gen_token
+	@revisions = Hash.new { gen_token }
 end
 
 Given /^the following rows:$/ do |table|
@@ -32,7 +33,7 @@ Given /^the following rows:$/ do |table|
 	step "I commit the transaction"
 end
 
-When /^I begin a transaction$/ do
+When /^I begin a(?:nother)? transaction$/ do
 	step "I send a begin message"
 	step "I receive a begin-ok message"
 end
@@ -69,6 +70,11 @@ When /^I send a(?:nother)? rollback message$/ do
 	server_call :default, "rollback", @transaction_token
 end
 
+When /^I perform the following updates:$/ do |table|
+	step "I send an update message containing:", table
+	step "I receive an update-ok message"
+end
+
 When /^I send an update message$/ do
 	raw = [ [ "key", "rev", "value" ] ]
 	table = Cucumber::Ast::Table.new raw
@@ -78,10 +84,12 @@ end
 When /^I send an update message containing:$/ do |table|
 	updates = table.hashes.map { |hash| [
 		parse_array(hash["key"]),
-		hash["rev"].empty? ? nil : hash["rev"],
+		hash["in"] && ! hash["in"].empty? ?
+			@revisions[hash["in"]] : nil,
 		parse_object(hash["value"]),
 	] }
 	server_call :default, "update", @transaction_token, updates
+	@update_outs = table.hashes.map { |hash| hash["out"] or nil }
 end
 
 Then /^I receive a begin\-ok message$/ do
@@ -107,7 +115,14 @@ end
 Then /^I receive an update\-ok message$/ do
 	name, *args = server_response
 	name.should == "update-ok"
-	args.size.should == 0
+	args.size.should == 1
+	revs = args[0]
+	revs.size.should == @update_outs.size
+	revs.each do |rev| rev.should match /^[a-z]{10}$/ end
+	@update_outs.each_with_index do |out, i|
+		next unless out
+		@revisions[out] = revs[i]
+	end
 end
 
 Then /^I receive a transaction\-token\-invalid message$/ do
@@ -128,7 +143,8 @@ Then /^the following rows should exist:$/ do |table|
 	name, *args = server_response
 	name.should == "fetch-ok"
 	args.size.should == 1
-	values = args [0]
+	rows = args[0]
+	values = rows.map { |row| row[1] }
 	expect = table.hashes.map { |hash| parse_object hash["value"] }
 	values.should == expect
 end
