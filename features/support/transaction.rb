@@ -42,6 +42,21 @@ When /^I commit the transaction$/ do
 	step "I receive a commit-ok message"
 end
 
+When /^I rollback the transaction$/ do
+	step "I send a rollback message"
+	step "I receive a rollback-ok message"
+end
+
+When /^I begin and commit a transaction$/ do
+	step "I begin a transaction"
+	step "I commit the transaction"
+end
+
+When /^I begin and rollback a transaction$/ do
+	step "I begin a transaction"
+	step "I rollback the transaction"
+end
+
 When /^I send a(?:nother)? begin message$/ do
 	server_call :default, "begin"
 end

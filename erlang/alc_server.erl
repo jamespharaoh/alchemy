@@ -310,7 +310,15 @@ handle (update, State,
 			alc_mq:send (
 				State#state.mq_client,
 				<<"alchemy-client-", ClientToken/binary>>,
-				[ <<"update-error">>, RequestToken ])
+				[ <<"update-error">>, RequestToken ]);
+
+		transaction_token_invalid ->
+
+			% send response
+			alc_mq:send (
+				State#state.mq_client,
+				<<"alchemy-client-", ClientToken/binary>>,
+				[ <<"transaction-token-invalid">>, RequestToken ])
 
 	end,
 

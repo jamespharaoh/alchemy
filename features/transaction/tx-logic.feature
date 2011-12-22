@@ -66,3 +66,23 @@ Feature: Transaction logic
       And I send a commit message
      Then I receive a rollback-ok message
       And I receive a transaction-token-invalid message
+
+  Scenario: Update with invalid transaction
+
+     When I send an update message containing:
+        | key | rev | value |
+     Then I receive a transaction-token-invalid message
+
+  Scenario: Update with committed transaction
+
+    Given I begin and commit a transaction
+     When I send an update message containing:
+        | key | rev | value |
+     Then I receive a transaction-token-invalid message
+
+  Scenario: Update with rolled back transaction
+
+    Given I begin and rollback a transaction
+     When I send an update message containing:
+        | key | rev | value |
+     Then I receive a transaction-token-invalid message
