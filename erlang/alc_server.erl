@@ -207,7 +207,7 @@ handle ('commit', State, [ ClientToken, RequestToken, TransactionToken ]) ->
 				<<"alchemy-client-", ClientToken/binary>>,
 				[ <<"commit-ok">>, RequestToken ]);
 
-		token_invalid ->
+		transaction_token_invalid ->
 
 			% send response
 			alc_mq:send (

@@ -14,7 +14,7 @@ task :compile do
 		name = File.basename source, ".erl"
 		target = ".build/#{name}.beam"
 		next if FileUtils.uptodate? target, [ source ]
-		cmd = "erlc +debug_info -o .build #{source}"
+		cmd = "erlc +debug_info -Werror -o .build #{source}"
 		puts cmd
 		system cmd or exit 1
 	end

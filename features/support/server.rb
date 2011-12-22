@@ -24,6 +24,7 @@
 Before do
 	@server_names = []
 	@server_responses = []
+	FileUtils.rm_r ".data" if File.exist? ".data"
 end
 
 def server_name_default
@@ -33,6 +34,7 @@ end
 def server_start server_name
 	return if @server_names.include? server_name
 	hyper_start
+	FileUtils.mkdir_p ".data/#{server_name}"
 	response = hyper_call "start", server_name
 	@server_names << server_name
 end

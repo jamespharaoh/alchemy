@@ -116,11 +116,17 @@ update (StorePid, TransactionToken, Updates) ->
 		StorePid,
 		{ update, TransactionToken, Updates }).
 
-% ==================== private
+% ==================== gen_server
 
 % ---------- init
 
 init ([ ServerName ]) ->
+
+	% open database
+	Options = [
+		{ file, ".data/" ++ ServerName ++ "/data" } ],
+	{ ok, data } =
+		dets:open_file (data, Options),
 
 	% setup state
 	State = #state {
@@ -159,57 +165,19 @@ handle_call ('begin', _From, State) ->
 
 handle_call ({ commit, TransactionToken }, _From, State) ->
 
-	case gb_trees:is_defined (
-			TransactionToken,
-			State#state.transactions) of
+	{ ok, NewState } =
+		do_commit (State, TransactionToken),
 
-		true ->
-
-			NewState = State#state {
-				transactions = gb_trees:delete (
-					TransactionToken,
-					State#state.transactions) },
-
-			{ reply, ok, NewState };
-
-		false ->
-
-			{ reply, token_invalid, State }
-
-		end;
+	{ reply, ok, NewState };
 
 % ---------- handle_call fetch
 
 handle_call ({ fetch, TransactionToken, Keys }, _From, State) ->
 
-	case gb_trees:is_defined (
-			TransactionToken,
-			State#state.transactions) of
+	{ ok, Rows } =
+		do_fetch (State, TransactionToken, Keys),
 
-		true ->
-
-			Transaction = gb_trees:get (
-				TransactionToken,
-				State#state.transactions),
-
-			Rows = lists:map (
-				fun (Key) ->
-					case gb_trees:lookup (
-							Key,
-							Transaction#transaction.updates) of
-						{ value, Value } -> Value;
-						none -> null
-						end
-					end,
-				Keys),
-
-			{ reply, { ok, Rows }, State };
-
-		false ->
-
-			{ reply, token_invalid, State }
-
-		end;
+	{ reply, { ok, Rows }, State };
 
 % ---------- handle_call rollback
 
@@ -237,74 +205,17 @@ handle_call ({ rollback, TransactionToken }, _From, State) ->
 
 % ---------- handle_call update
 
-handle_call ({ update, TransactionToken, Updates }, _From, State) ->
+handle_call ({ update, TransactionToken, Updates }, _From, State1) ->
 
-	% make sure transaction exists
-	case gb_trees:is_defined (
-			TransactionToken,
-			State#state.transactions) of
+	case do_update (State1, TransactionToken, Updates) of
 
-		% transaction does exist
-		true ->
+		{ ok, State2 } ->
 
-			% find transaction
-			Transaction = gb_trees:get (
-				TransactionToken,
-				State#state.transactions),
+			{ reply, ok, State2 };
 
-			% check for errors
-			Errors = lists:flatten (
-				lists:map (
-					fun ({ Key, _Rev, _Value }) ->
-						case gb_trees:is_defined (
-								Key,
-								Transaction#transaction.updates) of
-							true -> [ true ];
-							false -> []
-							end
-						end,
-					Updates)),
+		error ->
 
-			case Errors of
-
-				% no errors
-				[] ->
-
-					% update transaction
-					NewTransaction = Transaction#transaction {
-						updates = lists:foldl (
-							fun ({ Key, _Rev, Value }, Tree) ->
-								gb_trees:enter (
-									Key,
-									Value,
-									Tree)
-								end,
-							Transaction#transaction.updates,
-							Updates) },
-
-					% update state
-					NewState = State#state {
-						transactions = gb_trees:enter (
-							TransactionToken,
-							NewTransaction,
-							State#state.transactions) },
-
-					% return ok
-					{ reply, ok, NewState };
-
-				% update errors
-				_ ->
-
-					% return error
-					{ reply, error, State }
-
-				end;
-
-		% transaction doesn't exist
-		false ->
-
-			% return error
-			{ reply, token_invalid, State }
+			{ reply, error, State1 }
 
 		end;
 
@@ -346,3 +257,204 @@ terminate (_Reason, _State) ->
 code_change (_OldVsn, State, _Extra) ->
 
 	{ ok, State }.
+
+% ==================== internals
+
+% ---------- do_apply_updates
+
+do_apply_updates (Iter1) ->
+
+	case gb_trees:next (Iter1) of
+
+		{ Key, Val, Iter2 } ->
+
+			% insert the row
+			dets:insert (data, { Key, Val }),
+
+			% tail recurse
+			do_apply_updates (Iter2);
+
+		none ->
+
+			% return
+			ok
+
+		end.
+
+% --------- do_commit
+
+do_commit (State1, TransactionToken) ->
+
+	Transaction = do_get_transaction (State1, TransactionToken),
+
+	ok = do_apply_updates (
+		gb_trees:iterator (Transaction#transaction.updates)),
+
+	State2 = State1#state {
+		transactions = gb_trees:delete (
+			TransactionToken,
+			State1#state.transactions) },
+
+	{ ok, State2 }.
+
+% ---------- do_get_transaction
+
+do_get_transaction (State, TransactionToken) ->
+
+	% make sure transaction exists
+	case gb_trees:is_defined (
+			TransactionToken,
+			State#state.transactions) of
+
+		% transaction does exist
+		true ->
+
+			% find transaction
+			Transaction = gb_trees:get (
+				TransactionToken,
+				State#state.transactions),
+
+			% return
+			Transaction;
+
+		% transaction doesn't exist
+		false ->
+
+			% throw error
+			throw ({ reply, transaction_token_invalid, State })
+
+		end.
+
+% ---------- do_fetch
+
+do_fetch (State, TransactionToken, Keys) ->
+
+	% get transaction
+	Transaction = do_get_transaction (State, TransactionToken),
+	Updates = Transaction#transaction.updates,
+
+	% lookup rows
+	Rows = lists:map (
+		fun (Key) -> do_fetch_one (Updates, Key) end,
+		Keys),
+
+	% and return
+	{ ok, Rows }.
+
+% ---------- do_fetch_one
+
+do_fetch_one (Updates, Key) ->
+
+	% lookup row in transaction
+	case gb_trees:lookup (Key, Updates) of
+
+		% if found
+		{ value, Value } ->
+
+			% return it
+			Value;
+
+		% if not found
+		none ->
+
+			% lookup in dets
+			case dets:lookup (data, Key) of
+
+				% if found
+				[ Value ] ->
+
+					% return it
+					Value;
+
+				% if not found
+				[] ->
+
+					% return null
+					null
+
+				end
+		end.
+
+% ---------- do_update
+
+do_update (State1, TransactionToken, Updates) ->
+
+	% find transaction
+	Transaction1 = do_get_transaction (State1, TransactionToken),
+	TransactionUpdates = Transaction1#transaction.updates,
+
+	% check for errors
+	Errors = lists:flatten (
+		lists:map (
+			fun ({ Key, _Rev, _Value }) ->
+				do_update_check (TransactionUpdates, Key)
+				end,
+			Updates)),
+
+	case Errors of
+
+		% no errors
+		[] ->
+
+			% update transaction
+			Transaction2 = Transaction1#transaction {
+				updates = lists:foldl (
+					fun ({ Key, _Rev, Value }, Tree) ->
+						gb_trees:enter (Key, Value, Tree)
+						end,
+					TransactionUpdates,
+					Updates) },
+
+			% update state
+			State2 = State1#state {
+				transactions = gb_trees:enter (
+					TransactionToken,
+					Transaction2,
+					State1#state.transactions) },
+
+			% return ok
+			{ ok, State2 };
+
+		% update errors
+		_ ->
+
+io:format ("ERRORS: ~p\n", [ Errors ]),
+
+			% return error
+			error
+
+		end.
+
+% ---------- do_update_check
+
+do_update_check (Updates, Key) ->
+
+	% check for key in transaction
+	case gb_trees:is_defined (Key, Updates) of
+
+		% if found
+		true ->
+
+			% return error
+			[ exists_in_transaction ];
+
+		% if not found
+		false ->
+
+			% check for key in database
+			case dets:lookup (data, Key) of
+
+				% if found
+				[ _Val ] ->
+
+					% return error
+					[ exists_on_disk ];
+
+				% if not found
+				[] ->
+
+					% return ok
+					[]
+
+				end
+		end.

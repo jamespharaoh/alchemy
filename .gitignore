@@ -2,4 +2,7 @@
 *.plt
 erl_crash.dump
 scratch.erl
+/.build
+/.data
+/.dialyzer
 /mochiweb/
