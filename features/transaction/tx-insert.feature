@@ -1,12 +1,35 @@
 Feature: Insertions
 
-  Scenario: Insert a row
+  Scenario: Insert a row, can read back in same transaction
 
-    Given I have begun a transaction
-     When I send an update message containing:
+     When I begin a transaction
+      And I send an update message containing:
         | key       | rev | value                    |
         | row, name |     | name: name, value: value |
-     Then I should receive an update-ok message
+     Then I receive an update-ok message
       And the following rows should exist:
         | key       | value                    |
         | row, name | name: name, value: value |
+
+  Scenario: Insert a row fails if already exists in transaction
+
+     When I begin a transaction
+      And I send an update message containing:
+        | key       | rev | value                    |
+        | row, name |     | name: name, value: value |
+      And I send an update message containing:
+        | key       | rev | value                    |
+        | row, name |     | name: name, value: value |
+     Then I receive an update-ok message
+      And I receive an update-error message
+
+  Scenario: Insert a row fails if already exists
+
+    Given the following rows:
+        | key       | rev | value                    |
+        | row, name |     | name: name, value: value |
+     When I begin a transaction
+      And I send an update message containing:
+        | key       | rev | value                    |
+        | row, name |     | name: name, value: value |
+     Then I receive an update-error message

@@ -116,8 +116,6 @@ handle_info (
 
 	#amqp_msg { payload = Payload } = Message,
 
-	#state { mq_client = MqClient } = State,
-
 	try
 		Data = alc_misc:decode (Payload),
 		handle (State, Data)
@@ -126,7 +124,9 @@ handle_info (
 			io:format ("alc_server:handle_info: error decoding ~p\n", [ Payload ])
 	end,
 
-	alc_mq:ack (MqClient, Tag),
+	alc_mq:ack (
+		State#state.mq_client,
+		Tag),
 
 	{ noreply, State };
 
@@ -143,11 +143,8 @@ handle_info (Info, State) ->
 
 terminate (_Reason, State) ->
 
-	#state {
-		mq_client = MqClient
-	} = State,
-
-	alc_mq:close (MqClient),
+	ok = alc_mq:close (
+		State#state.mq_client),
 
 	ok.
 
@@ -305,7 +302,15 @@ handle (update, State,
 			alc_mq:send (
 				State#state.mq_client,
 				<<"alchemy-client-", ClientToken/binary>>,
-				[ <<"update-ok">>, RequestToken ])
+				[ <<"update-ok">>, RequestToken ]);
+
+		error ->
+
+			% send response
+			alc_mq:send (
+				State#state.mq_client,
+				<<"alchemy-client-", ClientToken/binary>>,
+				[ <<"update-error">>, RequestToken ])
 
 	end,
 

@@ -1,4 +1,5 @@
-/mochiweb/
-erl_crash.dump
 *.beam
+*.plt
+erl_crash.dump
 scratch.erl
+/mochiweb/

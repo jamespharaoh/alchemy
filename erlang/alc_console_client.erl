@@ -159,7 +159,7 @@ terminate (_Reason, State) ->
 	mq_send (State, [ <<"terminate">> ]),
 
 	% close mq client
-	alc_mq:close (MqClient),
+	ok = alc_mq:close (MqClient),
 
 	% output a message
 	io:format ("Disconnected ~s (~s)\n", [ Who, ConnId ]),

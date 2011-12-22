@@ -61,6 +61,7 @@ def server_call server_name, name, *args
 	request_token = gen_token
 	event_do do |cb|
 		data = [ name, client_token, request_token ] + args
+		$stderr.puts "SEND #{data.to_json}" if ENV["LOG_WIRE"]
 		$mq_exchange.publish JSON.dump(data), \
 			:routing_key => "alchemy-server-#{server_name}"
 		cb.call nil
@@ -69,8 +70,10 @@ def server_call server_name, name, *args
 	# read response
 	@server_responses << event_do do |cb|
 		client_queue.subscribe do |headers, payload|
-			name, token, *args = JSON.parse payload
+			data = JSON.parse payload
+			name, token, *args = data
 			if token == request_token
+				$stderr.puts "RECV #{data.to_json}" if ENV["LOG_WIRE"]
 				cb.call [ name, *args ]
 			else
 				raise "Error"

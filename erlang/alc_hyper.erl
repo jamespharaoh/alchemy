@@ -142,7 +142,7 @@ terminate (_Reason, State) ->
 	io:format ("Hypservisor stopping\n"),
 
 	% close mq client
-	alc_mq:close (MqClient),
+	ok = alc_mq:close (MqClient),
 
 	% console output
 	io:format ("Hypservisor stopped\n"),

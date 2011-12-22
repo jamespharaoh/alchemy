@@ -52,17 +52,30 @@
 	receive_queue,
 	tag }).
 
+-type this () :: pid ().
+
+-type channel () :: any ().
+-type connection () :: any ().
+
+-opaque client () :: #client {}.
+
 % ==================== public
 
 % ---------- ack
+
+-spec ack (client (), any ()) -> ok.
 
 ack (Client, Tag) ->
 
 	amqp_channel:cast (
 		Client#client.channel,
-		#'basic.ack' { delivery_tag = Tag }).
+		#'basic.ack' { delivery_tag = Tag }),
+
+	ok.
 
 % ---------- client_channel
+
+-spec client_channel (client ()) -> channel ().
 
 client_channel (Client) ->
 
@@ -71,6 +84,8 @@ client_channel (Client) ->
 	Channel.
 
 % ---------- close
+
+-spec close (client ()) -> ok.
 
 close (Client) ->
 
@@ -88,9 +103,11 @@ close (Client) ->
 	amqp_channel:close (Channel),
 
 	% return
-	{ ok }.
+	ok.
 
 % ---------- get_connection
+
+-spec get_connection (this ()) -> connection ().
 
 get_connection (Pid) ->
 
@@ -99,6 +116,8 @@ get_connection (Pid) ->
 		{ get_connection }).
 
 % ---------- open
+
+-spec open (this (), string ()) -> { ok, client () }.
 
 open (Pid, ReceiveQueueStr) ->
 
@@ -145,16 +164,22 @@ open (Pid, ReceiveQueueStr) ->
 
 % ---------- send
 
+-spec send (client (), binary (), any ()) -> ok.
+
 send (Client, SendQueue, Data) ->
 
 	Payload = list_to_binary (mochijson2:encode (Data)),
 
-	amqp_channel:cast (
+	ok = amqp_channel:cast (
 		client_channel (Client),
 		#'basic.publish' { exchange = <<"">>, routing_key = SendQueue },
-		#amqp_msg { payload = Payload }).
+		#amqp_msg { payload = Payload }),
+
+	ok.
 
 % ---------- start_link
+
+-spec start_link (string ()) -> { ok, pid () }.
 
 start_link (ServerName) ->
 
@@ -166,11 +191,15 @@ start_link (ServerName) ->
 
 % ---------- stop
 
+-spec stop (this ()) -> ok.
+
 stop (Pid) ->
 
-	gen_server:call (
+	ok = gen_server:call (
 		Pid,
-		terminate).
+		terminate),
+
+	ok.
 
 % ==================== private
 

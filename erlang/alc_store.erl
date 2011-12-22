@@ -239,37 +239,71 @@ handle_call ({ rollback, TransactionToken }, _From, State) ->
 
 handle_call ({ update, TransactionToken, Updates }, _From, State) ->
 
+	% make sure transaction exists
 	case gb_trees:is_defined (
 			TransactionToken,
 			State#state.transactions) of
 
+		% transaction does exist
 		true ->
 
+			% find transaction
 			Transaction = gb_trees:get (
 				TransactionToken,
 				State#state.transactions),
 
-			NewTransaction = Transaction#transaction {
-				updates = lists:foldl (
-					fun ({ Key, _Rev, Value }, Tree) ->
-						gb_trees:enter (
-							Key,
-							Value,
-							Tree)
+			% check for errors
+			Errors = lists:flatten (
+				lists:map (
+					fun ({ Key, _Rev, _Value }) ->
+						case gb_trees:is_defined (
+								Key,
+								Transaction#transaction.updates) of
+							true -> [ true ];
+							false -> []
+							end
 						end,
-					Transaction#transaction.updates,
-					Updates) },
+					Updates)),
 
-			NewState = State#state {
-				transactions = gb_trees:enter (
-					TransactionToken,
-					NewTransaction,
-					State#state.transactions) },
+			case Errors of
 
-			{ reply, ok, NewState };
+				% no errors
+				[] ->
 
+					% update transaction
+					NewTransaction = Transaction#transaction {
+						updates = lists:foldl (
+							fun ({ Key, _Rev, Value }, Tree) ->
+								gb_trees:enter (
+									Key,
+									Value,
+									Tree)
+								end,
+							Transaction#transaction.updates,
+							Updates) },
+
+					% update state
+					NewState = State#state {
+						transactions = gb_trees:enter (
+							TransactionToken,
+							NewTransaction,
+							State#state.transactions) },
+
+					% return ok
+					{ reply, ok, NewState };
+
+				% update errors
+				_ ->
+
+					% return error
+					{ reply, error, State }
+
+				end;
+
+		% transaction doesn't exist
 		false ->
 
+			% return error
 			{ reply, token_invalid, State }
 
 		end;

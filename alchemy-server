@@ -39,6 +39,7 @@ args = %W[
 	-pa .build
 	-s alc_boot
 	-sname alchemy-server-#{NAME}
+	-setcookie abc
 	--
 	-alc-server-name #{NAME}
 	-alc-mode simple

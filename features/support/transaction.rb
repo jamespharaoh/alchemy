@@ -21,21 +21,25 @@
 # limitations under the License.
 #
 
-Given /^I have begun a transaction$/ do
-	server_call :default, "begin"
-	name, *args = server_response
-	case [ name, args.size ]
-
-		when [ "begin-ok", 1 ]
-			@transaction_token = args [0]
-
-		else
-			raise "Error"
-	end
+Before do
+	@transaction_token = gen_token
 end
 
-Given /^I have not begun a transaction$/ do
-	@transaction_token = gen_token
+Given /^the following rows:$/ do |table|
+	step "I begin a transaction"
+	step "I send an update message containing:", table
+	step "I receive an update-ok message"
+	step "I commit the transaction"
+end
+
+When /^I begin a transaction$/ do
+	step "I send a begin message"
+	step "I receive a begin-ok message"
+end
+
+When /^I commit the transaction$/ do
+	step "I send a commit message"
+	step "I receive a commit-ok message"
 end
 
 When /^I send a(?:nother)? begin message$/ do
@@ -71,34 +75,41 @@ When /^I send an update message containing:$/ do |table|
 	server_call :default, "update", @transaction_token, updates
 end
 
-Then /^I should receive a begin\-ok message$/ do
+Then /^I receive a begin\-ok message$/ do
 	name, *args = server_response
 	name.should == "begin-ok"
 	args.size.should == 1
 	args [0].should match /^[a-z]{10}$/
+	@transaction_token = args [0]
 end
 
-Then /^I should receive a rollback\-ok message$/ do
+Then /^I receive a rollback\-ok message$/ do
 	name, *args = server_response
 	name.should == "rollback-ok"
 	args.size.should == 0
 end
 
-Then /^I should receive a commit\-ok message$/ do
+Then /^I receive a commit\-ok message$/ do
 	name, *args = server_response
 	name.should == "commit-ok"
 	args.size.should == 0
 end
 
-Then /^I should receive an update\-ok message$/ do
+Then /^I receive an update\-ok message$/ do
 	name, *args = server_response
 	name.should == "update-ok"
 	args.size.should == 0
 end
 
-Then /^I should receive a transaction\-token\-invalid message$/ do
+Then /^I receive a transaction\-token\-invalid message$/ do
 	name, *args = server_response
 	name.should == "transaction-token-invalid"
+	args.size.should == 0
+end
+
+Then /^I receive an update\-error message$/ do
+	name, *args = server_response
+	name.should == "update-error"
 	args.size.should == 0
 end
 
