@@ -81,6 +81,12 @@ def parse_any string
 	return YAML::load string
 end
 
+When /^I send an update message$/ do
+	raw = [ [ "key", "rev", "value" ] ]
+	table = Cucumber::Ast::Table.new raw
+	step "I send an update message containing:", table
+end
+
 When /^I send an update message containing:$/ do |table|
 	updates = table.hashes.map { |hash| [
 		parse_array(hash["key"]),
