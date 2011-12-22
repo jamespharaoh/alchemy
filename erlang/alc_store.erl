@@ -343,31 +343,22 @@ do_fetch_one (Updates, Key) ->
 	% lookup row in transaction
 	case gb_trees:lookup (Key, Updates) of
 
-		% if found
-		{ value, { Rev, Val } } ->
+		% if found, return it
+		{ value, { Rev, Val } } -> { Rev, Val };
 
-			% return it
-			{ Rev, Val };
+		% if not found, lookup in dets
+		none -> case dets:lookup (data, Key) of
 
-		% if not found
-		none ->
+			% if found, return it
+			[ { Key, Rev, Val } ] ->
+				{ Rev, Val };
 
-			% lookup in dets
-			case dets:lookup (data, Key) of
+			% if not found, return null
+			[] ->
+				null
 
-				% if found
-				[ { Key, Rev, Val } ] ->
+			end
 
-					% return it
-					{ Rev, Val };
-
-				% if not found
-				[] ->
-
-					% return null
-					null
-
-				end
 		end.
 
 % ---------- do_rollback
@@ -450,68 +441,21 @@ do_update (State1, TransactionToken, Updates) ->
 
 do_update_check (Updates, Key, Rev) ->
 
-	% check for conflict with current transaction
-	case do_update_check_transaction (Updates, Key, Rev) of
+	% lookup the existing row
+	case do_fetch_one (Updates, Key) of
 
-		% got error, return it
-		[ Error ] -> [ Error ];
+		% if found with matching rev, return ok
+		{ Rev, _Val } ->
+			[];
 
-		% no error, check for conflict in database
-		[] -> case do_update_check_committed (Key, Rev) of
+		% if found with non-matching rev, return error
+		{ _Rev, _Val } ->
+			[ revision_mismatch ];
 
-			% got error, return it
-			[ Error ] -> [ Error ];
-
-			% no error, return ok
-			[] -> []
-
+		% not found, require null revision
+		null -> case Rev of
+			null -> [];
+			_ -> [ revision_mismatch ]
 			end
-		end.
-
-do_update_check_transaction (Updates, Key, Rev) ->
-
-	% check for key in transaction
-	case gb_trees:lookup (Key, Updates) of
-
-		% found
-		{ value, { OldRev, _OldVal } } ->
-
-			% check if the revision matches
-			if
-
-				% if so return ok
-				Rev == OldRev -> [];
-
-				% otherwise return an error
-				true -> [ revision_mismatch ]
-
-			end;
-
-		% not found, return ok
-		none -> []
-
-		end.
-
-do_update_check_committed (Key, Rev) ->
-
-	% lookup key in database
-	case dets:lookup (data, Key) of
-
-		% found
-		[ { Key, OldRev, _OldVal } ] ->
-
-			% check if the revision matches
-			if
-
-				% if so return ok
-				Rev == OldRev -> [];
-
-				% otherwise return an error
-				true -> [ revision_mismatch ]
-
-			end;
-
-		% not found, return ok
-		[] -> []
 
 		end.
