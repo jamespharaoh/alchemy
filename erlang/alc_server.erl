@@ -268,7 +268,7 @@ handle (rollback, State,
 				<<"alchemy-client-", ClientToken/binary>>,
 				[ <<"rollback-ok">>, RequestToken ]);
 
-		token_invalid ->
+		transaction_token_invalid ->
 
 			% send response
 			alc_mq:send (

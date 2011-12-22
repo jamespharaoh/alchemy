@@ -145,21 +145,12 @@ handle_call (stop, _From, State) ->
 
 % ---------- handle_call begin
 
-handle_call ('begin', _From, State) ->
+handle_call ('begin', _From, State1) ->
 
-	Token = list_to_binary (alc_misc:gen_random ()),
+	{ ok, State2, TransactionToken } =
+		do_begin (State1),
 
-	Transaction = #transaction {
-		token = Token,
-		updates = gb_trees:empty () },
-
-	NewState = State#state {
-		transactions = gb_trees:enter (
-			Token,
-			Transaction,
-			State#state.transactions) },
-
-	{ reply, { ok, Token }, NewState };
+	{ reply, { ok, TransactionToken }, State2 };
 
 % ---------- handle_call commit
 
@@ -181,27 +172,12 @@ handle_call ({ fetch, TransactionToken, Keys }, _From, State) ->
 
 % ---------- handle_call rollback
 
-handle_call ({ rollback, TransactionToken }, _From, State) ->
+handle_call ({ rollback, TransactionToken }, _From, State1) ->
 
-	case gb_trees:is_defined (
-			TransactionToken,
-			State#state.transactions) of
+	{ ok, State2 } =
+		do_rollback (State1, TransactionToken),
 
-		true ->
-
-			NewState = State#state {
-				transactions =
-					gb_trees:delete (
-						TransactionToken,
-						State#state.transactions) },
-
-			{ reply, ok, NewState };
-
-		false ->
-
-			{ reply, token_invalid, State }
-
-		end;
+	{ reply, ok, State2 };
 
 % ---------- handle_call update
 
@@ -281,7 +257,26 @@ do_apply_updates (Iter1) ->
 
 		end.
 
-% --------- do_commit
+% ---------- do_begin
+
+do_begin (State1) ->
+
+	TransactionToken =
+		list_to_binary (alc_misc:gen_random ()),
+
+	Transaction = #transaction {
+		token = TransactionToken,
+		updates = gb_trees:empty () },
+
+	State2 = State1#state {
+		transactions = gb_trees:enter (
+			TransactionToken,
+			Transaction,
+			State1#state.transactions) },
+
+	{ ok, State2, TransactionToken }.
+
+% ---------- do_commit
 
 do_commit (State1, TransactionToken) ->
 
@@ -375,6 +370,22 @@ do_fetch_one (Updates, Key) ->
 				end
 		end.
 
+% ---------- do_rollback
+
+do_rollback (State1, TransactionToken) ->
+
+	% find transaction
+	_Transaction = do_get_transaction (State1, TransactionToken),
+
+	% update state
+	State2 = State1#state {
+		transactions = gb_trees:delete (
+			TransactionToken,
+			State1#state.transactions) },
+
+	% return
+	{ ok, State2 }.
+
 % ---------- do_update
 
 do_update (State1, TransactionToken, Updates) ->
@@ -417,8 +428,6 @@ do_update (State1, TransactionToken, Updates) ->
 
 		% update errors
 		_ ->
-
-io:format ("ERRORS: ~p\n", [ Errors ]),
 
 			% return error
 			error
