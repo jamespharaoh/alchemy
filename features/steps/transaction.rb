@@ -69,18 +69,6 @@ When /^I send a(?:nother)? rollback message$/ do
 	server_call :default, "rollback", @transaction_token
 end
 
-def parse_array string
-	return YAML::load "[#{string}]"
-end
-
-def parse_object string
-	return YAML::load "{#{string}}"
-end
-
-def parse_any string
-	return YAML::load string
-end
-
 When /^I send an update message$/ do
 	raw = [ [ "key", "rev", "value" ] ]
 	table = Cucumber::Ast::Table.new raw

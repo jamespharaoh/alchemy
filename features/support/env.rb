@@ -32,3 +32,15 @@ def log message
 	return unless ENV["LOG"]
 	$stderr.puts message
 end
+
+def parse_array string
+	return YAML::load "[#{string}]"
+end
+
+def parse_object string
+	return YAML::load "{#{string}}"
+end
+
+def parse_any string
+	return YAML::load string
+end

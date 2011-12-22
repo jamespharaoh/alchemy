@@ -1,4 +1,4 @@
-Feature: Insertions
+Feature: Update data by inserting new rows
 
   Scenario: Insert a row, can read back in same transaction
 
