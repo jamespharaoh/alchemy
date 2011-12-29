@@ -31,7 +31,6 @@ Feature: Complex updates
         | c   |    | val: c2 |
       And I commit the transaction
       And I begin another transaction
-
      Then the following rows should exist:
         | key | value   |
         | a   | val: a2 |
