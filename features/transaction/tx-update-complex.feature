@@ -15,7 +15,7 @@ Feature: Complex updates
         | a   | a1 | val: a2 |
         | b   | b1 |         |
         | c   |    | val: c2 |
-     Then the following rows should exist:
+     Then the following rows exist:
         | key | value   |
         | a   | val: a2 |
         | b   |         |
@@ -31,7 +31,7 @@ Feature: Complex updates
         | c   |    | val: c2 |
       And I commit the transaction
       And I begin another transaction
-     Then the following rows should exist:
+     Then the following rows exist:
         | key | value   |
         | a   | val: a2 |
         | b   |         |

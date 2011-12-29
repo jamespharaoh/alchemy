@@ -7,7 +7,7 @@ Feature: Update data by inserting new rows
         | key       | rev | value                    |
         | row, name |     | name: name, value: value |
      Then I receive an update-ok message
-      And the following rows should exist:
+      And the following rows exist:
         | key       | value                    |
         | row, name | name: name, value: value |
 

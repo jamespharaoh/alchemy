@@ -22,6 +22,7 @@
 #
 
 Before do
+	@transaction_tokens = []
 	@transaction_token = gen_token
 	@revisions = Hash.new { gen_token }
 end
@@ -92,12 +93,17 @@ When /^I send an update message containing:$/ do |table|
 	@update_outs = table.hashes.map { |hash| hash["out"] or nil }
 end
 
+When /^I return to the first transaction$/ do
+	@transaction_token = @transaction_tokens[0]
+end
+
 Then /^I receive a begin\-ok message$/ do
 	name, *args = server_response
 	name.should == "begin-ok"
 	args.size.should == 1
 	args [0].should match /^[a-z]{10}$/
 	@transaction_token = args [0]
+	@transaction_tokens << @transaction_token
 end
 
 Then /^I receive a rollback\-ok message$/ do
@@ -137,7 +143,7 @@ Then /^I receive an update\-error message$/ do
 	args.size.should == 0
 end
 
-Then /^the following rows should exist:$/ do |table|
+Then /^the following rows exist:$/ do |table|
 	keys = table.hashes.map { |hash| parse_array hash["key"] }
 	server_call :default, "fetch", @transaction_token, keys
 	name, *args = server_response

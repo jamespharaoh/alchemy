@@ -9,7 +9,7 @@ Feature: Modify an existing row
       And I perform the following updates:
         | key       | in | value                  |
         | row, name | a  | name: name, value: new |
-     Then the following rows should exist:
+     Then the following rows exist:
         | key       | value                  |
         | row, name | name: name, value: new |
 
@@ -24,7 +24,7 @@ Feature: Modify an existing row
         | row, name | a  | name: name, value: new |
       And I commit the transaction
       And I begin another transaction
-     Then the following rows should exist:
+     Then the following rows exist:
         | key       | value                  |
         | row, name | name: name, value: new |
 
