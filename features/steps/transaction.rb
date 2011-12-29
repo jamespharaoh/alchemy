@@ -86,7 +86,7 @@ When /^I send an update message containing:$/ do |table|
 		parse_array(hash["key"]),
 		hash["in"] && ! hash["in"].empty? ?
 			@revisions[hash["in"]] : nil,
-		parse_object(hash["value"]),
+		hash["value"].empty? ? nil : parse_object(hash["value"]),
 	] }
 	server_call :default, "update", @transaction_token, updates
 	@update_outs = table.hashes.map { |hash| hash["out"] or nil }
@@ -145,6 +145,8 @@ Then /^the following rows should exist:$/ do |table|
 	args.size.should == 1
 	rows = args[0]
 	values = rows.map { |row| row[1] }
-	expect = table.hashes.map { |hash| parse_object hash["value"] }
+	expect = table.hashes.map { |hash|
+		hash["value"] && ! hash["value"].empty? ?
+			parse_object(hash["value"]) : nil }
 	values.should == expect
 end

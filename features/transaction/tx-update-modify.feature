@@ -36,7 +36,7 @@ Feature: Modify an existing row
         | key       | value                  |
         | row, name | name: name, value: new |
 
-  Scenario: Update twice with next rev works
+  Scenario: Modify row twice in transaction
 
     Given the following rows:
         | key       | out | value                  |
@@ -78,10 +78,18 @@ Feature: Modify an existing row
         | key       | out | value                    |
         | row, name | a   | name: name, value: value |
 
+      And I begin a transaction
+
+      And I perform the following updates:
+        | key       | in | value                    |
+        | row, name | a  | name: name, value: value |
+
+      And I commit the transaction
+
      When I begin a transaction
 
       And I send an update message containing:
         | key       | in | value                    |
-        | row, name | b  | name: name, value: value |
+        | row, name | a  | name: name, value: value |
 
      Then I receive an update-error message
